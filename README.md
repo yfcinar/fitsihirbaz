@@ -28,8 +28,8 @@ sağlayıcı** ile çalışıyor — ama mimari gerçek sağlayıcıyı takmaya 
 `apps/api/src/payments/payments.provider.ts`). Sipariş, komisyon, webhook, state
 machine — hepsi gerçek, sadece son adımda kartın çekildiği yer simüle ediliyor.
 
-Detaylı mimari ve modül dokümanları: `CLAUDE.md` (ana doküman), `DATABASE.md`,
-`BACKEND.md`, `WEB.md`, `MOBIL.md`.
+Detaylı mimari ve modül dokümanları: `CLAUDE.md` (ana doküman), `GUNCEL_DURUM.md` (en güncel durum ve açık işler),
+`DATABASE.md`, `BACKEND.md`, `WEB.md`, `MOBIL.md`.
 
 ## Gereksinimler
 
@@ -99,7 +99,7 @@ e-posta doğrulama yok, kayıt olur olmaz giriş yapılmış sayılırsın.
 
 ```bash
 pnpm typecheck   # tüm workspace'ler
-pnpm test        # apps/api unit testleri (134 test, hepsi yeşil)
+pnpm test        # shared (125) + api (348) unit testleri, hepsi yeşil
 ```
 
 ## Notlar

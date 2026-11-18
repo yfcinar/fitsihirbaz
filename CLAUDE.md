@@ -1,6 +1,6 @@
 # Fit Sihirbaz — Proje Ana Dokümanı
 
-> Bu dosya projenin çatı dokümanıdır. Diğer klasörlerdeki detay dosyaları (db/DATABASE.md, backend/BACKEND.md, web/WEB.md, mobil/MOBIL.md) bu dosyayı tamamlar. Bir görevle başlamadan önce bu dosyayı ve ilgili detay dosyasını oku.
+> Bu dosya projenin çatı dokümanıdır. Detay dosyaları (DATABASE.md, BACKEND.md, WEB.md, MOBIL.md) **kök dizindedir** ve bu dosyayı tamamlar. Bir görevle başlamadan önce bu dosyayı, **GUNCEL_DURUM.md**'yi (daha günceldir, çelişkide o geçerlidir) ve ilgili detay dosyasını oku.
 
 ## 1. Proje Nedir
 
@@ -32,10 +32,11 @@ fit-sihirbaz/
 │   ├── shared/    → zod validation şemaları, ortak TS tipleri, tRPC/API client
 │   └── ui/        → (ileriki fazda) paylaşılan tasarım bileşenleri
 │
-├── db/DATABASE.md         → tüm veritabanı şeması, tablo/alan/ilişki detayları
-├── backend/BACKEND.md     → API modülleri, endpoint listesi, entegrasyon detayları
-├── web/WEB.md             → sayfa/route listesi, dashboard akışları
-└── mobil/MOBIL.md         → ekran listesi, navigasyon, push notification
+├── DATABASE.md            → tüm veritabanı şeması, tablo/alan/ilişki detayları
+├── BACKEND.md             → API modülleri, endpoint listesi, entegrasyon detayları
+├── WEB.md                 → sayfa/route listesi, dashboard akışları
+├── MOBIL.md               → ekran listesi, navigasyon, push notification
+└── GUNCEL_DURUM.md        → en güncel durum, açık işler ve riskler
 ```
 
 **Neden bu yapı:** Prisma şeması `packages/db` içinde tek yerde tanımlanır. Buradan üretilen TypeScript tipleri `packages/shared` üzerinden hem `apps/api` (backend validation), hem `apps/web`, hem `apps/mobile` (form validation, API client tipleri) tarafından kullanılır. Aynı veri modeli, aynı doğrulama kuralı — üç platformda da tekrar yazılmaz.
@@ -73,6 +74,8 @@ fit-sihirbaz/
 
 Orijinal faz planının kapsamı dışında, geliştirme sürecinde ek olarak eklenen özellikler: besin kaynakça/referans alım değerleri (TÜBER/DRI — **doğrulanmamış yer tutucu veri**, gerçek resmi kaynak gelene kadar "Doğrulanmamış" etiketiyle gösteriliyor), tarifler (recipes) modülü, LinkedIn-benzeri akış (posts/feed — beğeni/yorum), profil fotoğrafı + diyetisyen sertifika/lisans belgesi yükleme, admin kullanıcı yönetimi, mobil onboarding ekranı.
 
+**Kasım 2026 güncellemesi:** güvenlik sertleştirme, danışan günlük takibi, diyeti gönder akışı, paket içi seans hakkı, detaylı kayıt + KVKK rızası, USDA besin içe aktarma, diyetisyen sıralama algoritması ve izinli değişim vitrini eklendi (ayrıntı: `GUNCEL_DURUM.md`). Strateji: önce web, mobil dondurulmuş.
+
 Sıradaki olası iş: gerçek bir ödeme sağlayıcısına (iyzico/PayTR) geçiş — **bu, kural 5 gereği önce plan modunda onay gerektirir**, mock provider'ın yerine geçecek şekilde tek bir `PaymentProvider` implementasyonu yazılacak.
 
 ## 6. Kod Standartları ve Kurallar (Claude Code için)
@@ -91,10 +94,11 @@ Bir göreve başlamadan önce şu sırayla oku:
 
 1. Bu dosya (genel çatı, hangi fazdayız, hangi kural geçerli)
 2. Üzerinde çalışılacak alanın detay dosyası:
-   - Veritabanı/şema işi → `db/DATABASE.md`
-   - Backend/API işi → `backend/BACKEND.md`
-   - Web arayüz işi → `web/WEB.md`
-   - Mobil arayüz işi → `mobil/MOBIL.md`
+   - Veritabanı/şema işi → `DATABASE.md`
+   - Backend/API işi → `BACKEND.md`
+   - Web arayüz işi → `WEB.md`
+   - Mobil arayüz işi → `MOBIL.md` (mobil şu an dondurulmuştur)
+   - Son durum / açık işler → `GUNCEL_DURUM.md`
 
 ## 8. Claude Code'a Genel Not
 

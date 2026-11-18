@@ -5,6 +5,9 @@
 > program olmak"** — iki gelir motoru: SaaS aboneliği (klinik araçlar) + pazaryeri komisyonu.
 > Sıralama ilkesi: önce diyetisyeni araçlarla platforma yerleştir, pazaryeri onun üstüne gelir.
 
+> **Not (Kasım 2026):** Aşağıdaki "kritik eksikler" listesi eskidir; e-posta altyapısı, rate limiting ve Render deploy ayarı
+> yapılmıştır. Güncel liste için `GUNCEL_DURUM.md` > "Açık işler ve riskler" bölümüne bakın.
+
 ## Mevcut kritik eksikler
 
 - Ödeme mock (`MockPaymentProvider`), gerçek iyzico/PayTR anahtarı yok
