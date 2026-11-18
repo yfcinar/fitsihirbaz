@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuthStore } from "@/lib/auth-store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +16,13 @@ interface Counterpart {
 
 const POLL_INTERVAL_MS = 5000;
 
+function formatMessageTime(iso: string): string {
+  return new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 export function MessagesPage({ counterparts }: { counterparts: Counterpart[] }) {
   const utils = trpc.useUtils();
+  const currentUser = useAuthStore((state) => state.user);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -52,6 +58,9 @@ export function MessagesPage({ counterparts }: { counterparts: Counterpart[] }) 
   }
 
   const conversations = conversationsQuery.data ?? [];
+  const selectedConversation = conversations.find((conversation) => conversation.id === conversationId);
+  // Karşı taraf, benim rolümün tersidir (danışan ↔ diyetisyen).
+  const counterpartRoleLabel = currentUser?.role === "DIETITIAN" ? "Danışan" : "Diyetisyen";
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -104,12 +113,46 @@ export function MessagesPage({ counterparts }: { counterparts: Counterpart[] }) 
           <p className="m-auto text-muted-foreground">Bir sohbet seçin veya yeni bir sohbet başlatın.</p>
         ) : (
           <>
-            <div className="flex-1 space-y-2 overflow-y-auto p-4">
-              {messagesQuery.data?.map((message) => (
-                <div key={message.id} className="rounded-md bg-muted px-3 py-2 text-sm">
-                  {message.content}
-                </div>
-              ))}
+            <div className="border-b px-4 py-2 text-sm">
+              {selectedConversation ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {selectedConversation.counterpartFirstName} {selectedConversation.counterpartLastName}
+                  </span>{" "}
+                  <span className="text-muted-foreground">({counterpartRoleLabel})</span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">Sohbet</span>
+              )}
+            </div>
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              {messagesQuery.data?.length === 0 && (
+                <p className="text-sm text-muted-foreground">Henüz mesaj yok. İlk mesajı siz yazın.</p>
+              )}
+              {messagesQuery.data?.map((message) => {
+                const isMine = message.senderId === currentUser?.id;
+                const senderName = isMine
+                  ? "Siz"
+                  : selectedConversation
+                    ? `${selectedConversation.counterpartFirstName} ${selectedConversation.counterpartLastName}`
+                    : counterpartRoleLabel;
+                return (
+                  <div key={message.id} className={cn("flex flex-col", isMine ? "items-end" : "items-start")}>
+                    <p className="mb-0.5 text-xs text-muted-foreground">
+                      {senderName}
+                      {!isMine && ` · ${counterpartRoleLabel}`} · {formatMessageTime(message.createdAt)}
+                    </p>
+                    <div
+                      className={cn(
+                        "max-w-[80%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm",
+                        isMine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                      )}
+                    >
+                      {message.content}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <form onSubmit={handleSend} className="flex gap-2 border-t p-3">
               <Input

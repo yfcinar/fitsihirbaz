@@ -20,6 +20,32 @@ export default function DiyetisyenPanelPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold text-foreground">Panelim</h1>
 
+      <Card className="mb-6 border-primary/20 bg-accent p-4">
+        <p className="text-sm font-semibold text-foreground">Diyet yazmak için</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Bir danışan seçin, <span className="font-medium text-foreground">Plan Oluştur</span> deyin. Günleri, öğünleri ve
+          besinleri ekleyip <span className="font-medium text-foreground">Danışana Gönder</span> ile yayınlayın; danışan
+          “Diyetlerim” sayfasında görür.
+        </p>
+        {clientsQuery.data && clientsQuery.data.length === 0 && (
+          <p className="mt-2 text-sm text-muted-foreground">Henüz danışanınız yok. Paket satın alan danışanlar burada listelenir.</p>
+        )}
+        {clientsQuery.data && clientsQuery.data.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {clientsQuery.data.slice(0, 6).map((client) => (
+              <li key={client.id}>
+                <Link
+                  href={`/diyetisyen/danisanlar/${client.id}/plan-olustur`}
+                  className="inline-block rounded-md border bg-background px-3 py-1.5 text-sm font-medium text-primary hover:bg-muted"
+                >
+                  {client.firstName} {client.lastName} için diyet yaz →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Danışan Sayısı</p>
