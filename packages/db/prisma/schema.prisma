@@ -134,6 +134,7 @@ model User {
   postComments     PostComment[]
   emailTokens      EmailToken[]
   refreshTokens    RefreshToken[]
+  consents         ConsentRecord[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -171,6 +172,7 @@ model DietitianProfile {
   yearsOfExperience   Int?
   licenseNumber       String?
   certificationUrls   String[]
+  city                String?
   verificationStatus  VerificationStatus @default(PENDING)
   commissionRate      Decimal            @default(0.15)
   averageRating       Decimal?
@@ -202,6 +204,18 @@ model ClientProfile {
   goal           Goal?
   activityLevel  ActivityLevel?
   medicalNotes   String?
+  // Diyetisyen eşleştirme ve kişiselleştirme için kayıtta/profilde toplanan yaşam tarzı bilgileri.
+  // Hepsi opsiyonel ve veri minimizasyonu gereği yalnızca bu amaçla kullanılır.
+  occupation          String?
+  hobbies             String[]
+  sports              String[]
+  dietaryPreferences  String[]
+  allergies           String[]
+  currentWeightKg     Decimal?
+  targetWeightKg      Decimal?
+  city                String?
+  preferredSessionMode SessionMode?
+  maxBudgetTry        Int?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -826,4 +840,27 @@ enum SessionMode {
 enum AppointmentType {
   ONLINE
   IN_PERSON
+}
+
+// ---- KVKK: açık rıza / aydınlatma kayıtları ----
+
+enum ConsentType {
+  PRIVACY_NOTICE        // aydınlatma metnini okuduğunu onaylama
+  TERMS_OF_SERVICE      // kullanım koşulları
+  HEALTH_DATA_EXPLICIT  // sağlık verisinin işlenmesine açık rıza (özel nitelikli kişisel veri)
+}
+
+// Her rıza ayrı satırdır: hangi metnin hangi sürümüne ne zaman onay verildiği (ve ne zaman
+// geri çekildiği) kanıtlanabilir. Rıza geri çekilince satır silinmez, revokedAt dolar.
+model ConsentRecord {
+  id         String      @id @default(uuid())
+  userId     String
+  type       ConsentType
+  version    String
+  acceptedAt DateTime    @default(now())
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
 }

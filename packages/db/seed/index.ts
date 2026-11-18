@@ -554,6 +554,67 @@ async function main() {
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "MALE", value: 38 });
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "FEMALE", value: 25 });
 
+  // Demo profil detayları: diyetisyen sıralama (eşleştirme) algoritmasını gerçekçi veriyle denemek için.
+  const demoCities: Record<string, string> = {
+    "ayse.yilmaz@fitsihirbaz.com": "İzmir",
+    "mehmet.demir@fitsihirbaz.com": "İstanbul",
+    "zeynep.kaya@fitsihirbaz.com": "Ankara",
+  };
+  for (const [email, city] of Object.entries(demoCities)) {
+    await prisma.dietitianProfile.updateMany({ where: { user: { email } }, data: { city } });
+  }
+  const demoClientDetails: Record<string, object> = {
+    "elif.sahin@example.com": {
+      occupation: "Öğretmen",
+      hobbies: ["Kitap okumak", "Yürüyüş"],
+      sports: ["Pilates"],
+      dietaryPreferences: [],
+      allergies: [],
+      currentWeightKg: 78,
+      targetWeightKg: 68,
+      city: "İzmir",
+      maxBudgetTry: 3000,
+    },
+    "can.ozturk@example.com": {
+      occupation: "Yazılım geliştirici",
+      hobbies: ["Oyun", "Fotoğrafçılık"],
+      sports: ["Fitness", "Koşu"],
+      currentWeightKg: 74,
+      targetWeightKg: 80,
+      city: "İstanbul",
+      preferredSessionMode: "ONLINE",
+    },
+    "deniz.aydin@example.com": {
+      occupation: "Avukat",
+      hobbies: ["Seyahat"],
+      sports: ["Yüzme"],
+      dietaryPreferences: ["Vejetaryen"],
+      allergies: ["Fıstık"],
+      currentWeightKg: 66,
+      targetWeightKg: 60,
+      city: "İstanbul",
+      maxBudgetTry: 1500,
+    },
+  };
+  for (const [email, details] of Object.entries(demoClientDetails)) {
+    await prisma.clientProfile.updateMany({ where: { user: { email } }, data: details });
+  }
+
+  // Demo kullanıcıların KVKK rıza kayıtları (gerçek kayıtta auth.register oluşturur).
+  const usersWithoutConsent = await prisma.user.findMany({
+    where: { role: { in: ["CLIENT", "DIETITIAN"] }, consents: { none: {} } },
+    select: { id: true, role: true },
+  });
+  for (const user of usersWithoutConsent) {
+    await prisma.consentRecord.createMany({
+      data: [
+        { userId: user.id, type: "PRIVACY_NOTICE", version: "2026-11-taslak" },
+        { userId: user.id, type: "TERMS_OF_SERVICE", version: "2026-11-taslak" },
+        ...(user.role === "CLIENT" ? [{ userId: user.id, type: "HEALTH_DATA_EXPLICIT" as const, version: "2026-11-taslak" }] : []),
+      ],
+    });
+  }
+
   // Demo: Ayşe'nin Elif için yazdığı aktif 7 günlük plan + Elif'in ilk günlerdeki takip kayıtları.
   // Diyetisyen takip görünümünü ve danışan günlüğünü boş ekranla değil dolu veriyle görmek için.
   const demoPlanTitle = "Demo: 7 Günlük Kilo Verme Planı";

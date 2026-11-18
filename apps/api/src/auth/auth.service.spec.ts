@@ -1,3 +1,4 @@
+import { CONSENT_VERSION } from "@fit-sihirbaz/shared";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenService } from "./token.service";
@@ -19,6 +20,7 @@ function buildUserRow(overrides: Partial<Record<string, unknown>> = {}) {
     role: "CLIENT",
     firstName: "Ada",
     lastName: "Lovelace",
+    consents: CONSENTS,
     phone: null,
     avatarUrl: null,
     isEmailVerified: false,
@@ -41,6 +43,8 @@ function buildEmailTokenRow(overrides: Partial<Record<string, unknown>> = {}) {
     ...overrides,
   };
 }
+
+const CONSENTS = { privacyNotice: true as const, termsOfService: true as const, healthDataExplicit: true };
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -110,6 +114,7 @@ describe("AuthService", () => {
           role: "CLIENT",
           firstName: "Ada",
           lastName: "Lovelace",
+          consents: CONSENTS,
         }),
       ).rejects.toBeInstanceOf(EmailAlreadyExistsError);
       expect(prisma.user.create).not.toHaveBeenCalled();
@@ -127,6 +132,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       expect(prisma.user.create).toHaveBeenCalledTimes(1);
@@ -135,6 +141,45 @@ describe("AuthService", () => {
       expect(createArgs.data.clientProfile).toEqual({ create: {} });
       expect(result.user.email).toBe("test@example.com");
       expect(result.tokens).toEqual({ accessToken: "access", refreshToken: "refresh" });
+    });
+
+    it("rızaları sürümüyle birlikte kaydeder (aydınlatma, koşullar, sağlık verisi)", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(buildUserRow());
+
+      await service.register({
+        email: "test@example.com",
+        password: "Sifre123",
+        role: "CLIENT",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        consents: CONSENTS,
+      });
+
+      const consents = prisma.user.create.mock.calls[0][0].data.consents.create;
+      expect(consents.map((entry: { type: string }) => entry.type)).toEqual([
+        "PRIVACY_NOTICE",
+        "TERMS_OF_SERVICE",
+        "HEALTH_DATA_EXPLICIT",
+      ]);
+      expect(consents.every((entry: { version: string }) => entry.version === CONSENT_VERSION)).toBe(true);
+    });
+
+    it("sağlık verisi rızası verilmediyse (diyetisyen) bu rıza kaydı oluşturulmaz", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(buildUserRow({ role: "DIETITIAN" }));
+
+      await service.register({
+        email: "dyt@example.com",
+        password: "Sifre123",
+        role: "DIETITIAN",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        consents: { ...CONSENTS, healthDataExplicit: false },
+      });
+
+      const consents = prisma.user.create.mock.calls[0][0].data.consents.create;
+      expect(consents.map((entry: { type: string }) => entry.type)).toEqual(["PRIVACY_NOTICE", "TERMS_OF_SERVICE"]);
     });
 
     it("DIETITIAN rolü için dietitianProfile oluşturur", async () => {
@@ -147,6 +192,7 @@ describe("AuthService", () => {
         role: "DIETITIAN",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       const createArgs = prisma.user.create.mock.calls[0][0];
@@ -165,6 +211,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
       await flushPromises();
 
@@ -214,6 +261,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       prisma.user.findUnique.mockResolvedValue(buildUserRow({ passwordHash: storedHash }));

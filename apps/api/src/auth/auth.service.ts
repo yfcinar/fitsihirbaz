@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { CONSENT_VERSION } from "@fit-sihirbaz/shared";
 import type { AuthResponse, AuthTokens, LoginInput, PublicUser, RegisterInput } from "@fit-sihirbaz/shared";
 import type { User } from "@fit-sihirbaz/db";
 import { PrismaService } from "../prisma/prisma.service";
@@ -54,6 +55,16 @@ export class AuthService {
         firstName: input.firstName,
         lastName: input.lastName,
         phone: input.phone,
+        // Her rıza, onaylanan metin sürümüyle birlikte ayrı satır olarak saklanır (KVKK ispat yükü).
+        consents: {
+          create: [
+            { type: "PRIVACY_NOTICE", version: CONSENT_VERSION },
+            { type: "TERMS_OF_SERVICE", version: CONSENT_VERSION },
+            ...(input.consents.healthDataExplicit
+              ? [{ type: "HEALTH_DATA_EXPLICIT" as const, version: CONSENT_VERSION }]
+              : []),
+          ],
+        },
         ...(input.role === "CLIENT"
           ? { clientProfile: { create: {} } }
           : { dietitianProfile: { create: {} } }),

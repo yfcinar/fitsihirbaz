@@ -18,5 +18,15 @@ export function toClientProfile(row: ClientProfileWithUser): ClientProfile {
     goal: row.goal,
     activityLevel: row.activityLevel,
     medicalNotes: row.medicalNotes,
+    occupation: row.occupation,
+    hobbies: row.hobbies,
+    sports: row.sports,
+    dietaryPreferences: row.dietaryPreferences,
+    allergies: row.allergies,
+    currentWeightKg: row.currentWeightKg === null ? null : Number(row.currentWeightKg),
+    targetWeightKg: row.targetWeightKg === null ? null : Number(row.targetWeightKg),
+    city: row.city,
+    preferredSessionMode: row.preferredSessionMode,
+    maxBudgetTry: row.maxBudgetTry,
   };
 }

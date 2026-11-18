@@ -20,7 +20,14 @@ async function main() {
   const admin = await prisma.user.upsert({
     where: { email },
     update: { passwordHash, role: "ADMIN", isActive: true },
-    create: { email, passwordHash, role: "ADMIN", isEmailVerified: true },
+    create: {
+      email,
+      passwordHash,
+      role: "ADMIN",
+      firstName: process.env.ADMIN_FIRST_NAME?.trim() || "Yönetici",
+      lastName: process.env.ADMIN_LAST_NAME?.trim() || "Fit Sihirbaz",
+      isEmailVerified: true,
+    },
   });
   // eslint-disable-next-line no-console
   console.log(`Admin hazır: ${admin.email}`);

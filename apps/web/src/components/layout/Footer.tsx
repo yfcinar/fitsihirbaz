@@ -10,6 +10,8 @@ const PRODUCT_LINKS = [
 const ACCOUNT_LINKS = [
   { href: "/giris", label: "Giriş" },
   { href: "/kayit", label: "Kayıt Ol" },
+  { href: "/kvkk-aydinlatma", label: "KVKK Aydınlatma Metni" },
+  { href: "/kullanim-kosullari", label: "Kullanım Koşulları" },
 ];
 
 export function Footer() {

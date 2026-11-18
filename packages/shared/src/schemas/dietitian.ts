@@ -15,6 +15,7 @@ export const DietitianPublicSummarySchema = z.object({
   specialties: z.array(z.string()),
   yearsOfExperience: z.number().int().nullable(),
   averageRating: z.number().nullable(),
+  city: z.string().nullable(),
   verificationStatus: VerificationStatusSchema,
 });
 export type DietitianPublicSummary = z.infer<typeof DietitianPublicSummarySchema>;
@@ -49,6 +50,7 @@ export const UpdateDietitianProfileInputSchema = z.object({
   specialties: z.array(z.string().min(1).max(50)).max(20).optional(),
   yearsOfExperience: optionalCoerced(z.coerce.number().int().min(0).max(70)),
   licenseNumber: optionalCoerced(z.string().min(1).max(50)),
+  city: optionalCoerced(z.string().trim().min(1).max(80)),
 });
 export type UpdateDietitianProfileInput = z.infer<typeof UpdateDietitianProfileInputSchema>;
 
