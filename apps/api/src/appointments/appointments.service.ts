@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import type { Appointment, CreateAppointmentInput, UpdateAppointmentStatusInput } from "@fit-sihirbaz/shared";
+import type {
+  Appointment,
+  CreateAppointmentInput,
+  SessionBalance,
+  UpdateAppointmentStatusInput,
+} from "@fit-sihirbaz/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { AppointmentReminderQueue } from "../jobs/appointment-reminder.queue";
@@ -9,12 +14,23 @@ import {
   ClientNotLinkedError,
   ClientProfileNotFoundError,
   DietitianProfileNotFoundError,
+  NoSessionsRemainingError,
+  SessionModeNotAllowedError,
+  SessionPackageExpiredError,
 } from "./appointments.errors";
 import { toAppointment } from "./appointments.mapper";
+import { computeBalance, pickOrderForBooking } from "./session-balance";
 
 const APPOINTMENT_INCLUDE = {
   client: { include: { user: true } },
   dietitian: { include: { user: true } },
+  order: { include: { package: true } },
+} as const;
+
+// Seans bakiyesi için ödenmiş siparişler; iptal edilen randevular hakkı geri verir.
+const PAID_ORDERS_FOR_BALANCE = {
+  package: true,
+  appointments: { where: { status: { not: "CANCELLED" as const } }, select: { id: true } },
 } as const;
 
 @Injectable()
@@ -38,13 +54,34 @@ export class AppointmentsService {
       throw new ClientNotLinkedError();
     }
 
+    // Paket satın almış danışanın seans hakkı kontrol edilir ve hak ilgili siparişten düşülür;
+    // paketi olmayan (diyetisyenin elle eklediği) danışan için kısıt uygulanmaz.
+    const scheduledAt = new Date(input.scheduledAt);
+    const orders = await this.prisma.order.findMany({
+      where: { clientId: clientProfile.id, dietitianId: input.dietitianId, status: "PAID" },
+      include: PAID_ORDERS_FOR_BALANCE,
+      orderBy: { createdAt: "asc" },
+    });
+    const pick = pickOrderForBooking(orders, input.type, scheduledAt);
+    if (pick.kind === "mode-not-allowed") {
+      throw new SessionModeNotAllowedError();
+    }
+    if (pick.kind === "expired") {
+      throw new SessionPackageExpiredError();
+    }
+    if (pick.kind === "no-sessions") {
+      throw new NoSessionsRemainingError();
+    }
+
     const appointment = await this.prisma.appointment.create({
       data: {
         clientId: clientProfile.id,
         dietitianId: input.dietitianId,
-        scheduledAt: new Date(input.scheduledAt),
+        scheduledAt,
         durationMinutes: input.durationMinutes ?? 30,
+        type: input.type,
         meetingLink: input.meetingLink,
+        orderId: pick.kind === "ok" ? pick.order.id : null,
         status: "SCHEDULED",
       },
       include: APPOINTMENT_INCLUDE,
@@ -57,6 +94,19 @@ export class AppointmentsService {
     await this.reminderQueue.scheduleReminder(appointment.id, appointment.scheduledAt);
 
     return toAppointment(appointment, "CLIENT");
+  }
+
+  async getSessionBalance(clientUserId: string, dietitianId: string): Promise<SessionBalance> {
+    const clientProfile = await this.prisma.clientProfile.findUnique({ where: { userId: clientUserId } });
+    if (!clientProfile) {
+      throw new ClientProfileNotFoundError();
+    }
+    const orders = await this.prisma.order.findMany({
+      where: { clientId: clientProfile.id, dietitianId, status: "PAID" },
+      include: PAID_ORDERS_FOR_BALANCE,
+      orderBy: { createdAt: "asc" },
+    });
+    return computeBalance(orders, new Date());
   }
 
   async updateStatus(dietitianUserId: string, input: UpdateAppointmentStatusInput): Promise<Appointment> {

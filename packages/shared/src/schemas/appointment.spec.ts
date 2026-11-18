@@ -28,3 +28,20 @@ describe("CreateAppointmentInputSchema", () => {
     expect(CreateAppointmentInputSchema.safeParse({ ...validInput, durationMinutes: 600 }).success).toBe(false);
   });
 });
+
+describe("CreateAppointmentInputSchema type", () => {
+  const base = { dietitianId: "11111111-1111-1111-1111-111111111111", scheduledAt: "2026-07-15T14:30" };
+
+  it("type verilmezse ONLINE varsayar", () => {
+    const result = CreateAppointmentInputSchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe("ONLINE");
+    }
+  });
+
+  it("IN_PERSON kabul eder, bilinmeyen türü reddeder", () => {
+    expect(CreateAppointmentInputSchema.safeParse({ ...base, type: "IN_PERSON" }).success).toBe(true);
+    expect(CreateAppointmentInputSchema.safeParse({ ...base, type: "PHONE" }).success).toBe(false);
+  });
+});

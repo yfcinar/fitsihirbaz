@@ -1,4 +1,4 @@
-import type { MealType, ReferenceLifeStage, ReferenceSex } from "./schemas";
+import type { AppointmentType, MealType, ReferenceLifeStage, ReferenceSex, SessionMode } from "./schemas";
 
 // Web ve mobil arasında paylaşılan görüntüleme etiketleri (MOBIL.md §7).
 export const MEAL_TYPE_LABELS: Record<MealType, string> = {
@@ -6,6 +6,17 @@ export const MEAL_TYPE_LABELS: Record<MealType, string> = {
   LUNCH: "Öğle Yemeği",
   DINNER: "Akşam Yemeği",
   SNACK: "Ara Öğün",
+};
+
+export const SESSION_MODE_LABELS: Record<SessionMode, string> = {
+  ONLINE: "Online",
+  IN_PERSON: "Yüz yüze",
+  BOTH: "Online veya yüz yüze",
+};
+
+export const APPOINTMENT_TYPE_LABELS: Record<AppointmentType, string> = {
+  ONLINE: "Online",
+  IN_PERSON: "Yüz yüze",
 };
 
 export const REFERENCE_SEX_LABELS: Record<ReferenceSex, string> = {

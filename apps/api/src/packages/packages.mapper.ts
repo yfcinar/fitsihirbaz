@@ -9,6 +9,7 @@ export function toPackage(row: PackageRow): Package {
     description: row.description,
     durationDays: row.durationDays,
     sessionCount: row.sessionCount,
+    sessionMode: row.sessionMode,
     price: Number(row.price),
     currency: row.currency,
     isActive: row.isActive,

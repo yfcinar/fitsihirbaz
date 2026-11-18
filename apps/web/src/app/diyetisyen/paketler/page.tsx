@@ -7,7 +7,9 @@ import {
   CreatePackageInputSchema,
   UpdatePackageInputSchema,
   type CreatePackageInput,
+  SESSION_MODE_LABELS,
   type Package,
+  type SessionMode,
   type UpdatePackageInput,
 } from "@fit-sihirbaz/shared";
 import { trpc } from "@/lib/trpc";
@@ -43,6 +45,7 @@ function EditPackageForm({ pkg, onDone }: { pkg: Package; onDone: () => void }) 
       description: pkg.description ?? undefined,
       durationDays: pkg.durationDays,
       sessionCount: pkg.sessionCount ?? undefined,
+      sessionMode: pkg.sessionMode,
       price: pkg.price,
     },
   });
@@ -73,6 +76,20 @@ function EditPackageForm({ pkg, onDone }: { pkg: Package; onDone: () => void }) 
           <Label htmlFor={`edit-session-${pkg.id}`}>Görüşme Sayısı (opsiyonel)</Label>
           <Input id={`edit-session-${pkg.id}`} type="number" min="1" {...register("sessionCount")} />
         </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-mode-${pkg.id}`}>Görüşme Türü</Label>
+            <select
+              id={`edit-mode-${pkg.id}`}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+              {...register("sessionMode")}
+            >
+              {(Object.keys(SESSION_MODE_LABELS) as SessionMode[]).map((mode) => (
+                <option key={mode} value={mode}>
+                  {SESSION_MODE_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </div>
       </div>
       <div className="mt-3 space-y-1.5">
         <Label htmlFor={`edit-description-${pkg.id}`}>Açıklama (opsiyonel)</Label>
@@ -117,7 +134,7 @@ export default function PaketlerPage() {
     formState: { errors, isSubmitting },
   } = useForm<CreatePackageInput>({
     resolver: zodResolver(CreatePackageInputSchema),
-    defaultValues: { currency: "TRY" },
+    defaultValues: { currency: "TRY", sessionMode: "BOTH" },
   });
 
   async function onSubmit(values: CreatePackageInput) {
@@ -151,6 +168,20 @@ export default function PaketlerPage() {
             <Label htmlFor="sessionCount">Görüşme Sayısı (opsiyonel)</Label>
             <Input id="sessionCount" type="number" min="1" {...register("sessionCount")} />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sessionMode">Görüşme Türü</Label>
+            <select
+              id="sessionMode"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+              {...register("sessionMode")}
+            >
+              {(Object.keys(SESSION_MODE_LABELS) as SessionMode[]).map((mode) => (
+                <option key={mode} value={mode}>
+                  {SESSION_MODE_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="description">Açıklama (opsiyonel)</Label>
@@ -182,7 +213,7 @@ export default function PaketlerPage() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {pkg.durationDays} gün · {pkg.price} {pkg.currency}
+                  {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""} · {SESSION_MODE_LABELS[pkg.sessionMode]} · {pkg.price} {pkg.currency}
                 </p>
               </div>
               <div className="flex gap-2">

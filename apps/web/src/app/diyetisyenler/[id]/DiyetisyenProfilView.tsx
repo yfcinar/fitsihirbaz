@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Star } from "lucide-react";
+import { SESSION_MODE_LABELS } from "@fit-sihirbaz/shared";
 import { trpc } from "@/lib/trpc";
 import { useAuthStore } from "@/lib/auth-store";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
@@ -96,7 +97,7 @@ export function DiyetisyenProfilView() {
               <div>
                 <p className="font-medium text-foreground">{pkg.title}</p>
                 <p className="text-sm text-muted-foreground">
-                  {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""}
+                  {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""} · {SESSION_MODE_LABELS[pkg.sessionMode]}
                 </p>
               </div>
               <p className="text-lg font-semibold text-foreground">

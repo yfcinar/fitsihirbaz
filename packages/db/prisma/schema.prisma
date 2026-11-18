@@ -443,6 +443,7 @@ model Package {
   description    String?
   durationDays   Int
   sessionCount   Int?
+  sessionMode    SessionMode @default(BOTH)
   price          Decimal
   currency       String   @default("TRY")
   isActive       Boolean  @default(true)
@@ -475,6 +476,7 @@ model Order {
   package    Package          @relation(fields: [packageId], references: [id])
   dietitian  DietitianProfile @relation(fields: [dietitianId], references: [id])
   payment    Payment?
+  appointments Appointment[]
 
   @@index([status])
 }
@@ -508,12 +510,16 @@ model Appointment {
   scheduledAt       DateTime
   durationMinutes   Int                @default(30)
   status            AppointmentStatus
+  type              AppointmentType    @default(ONLINE)
   meetingLink       String?
+  // Randevunun hangi paket siparişinin seans hakkından düşüldüğü; manuel bağlı danışanlarda null.
+  orderId           String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   client     ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   dietitian  DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  order      Order?           @relation(fields: [orderId], references: [id])
 
   @@index([scheduledAt])
 }
@@ -808,4 +814,16 @@ model DayComment {
   dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
 
   @@index([clientId, logDate])
+}
+
+// Paketin hangi seans türlerini kapsadığı ve randevunun türü.
+enum SessionMode {
+  ONLINE
+  IN_PERSON
+  BOTH
+}
+
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
 }

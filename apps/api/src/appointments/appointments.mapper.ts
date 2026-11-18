@@ -4,6 +4,7 @@ import type { Appointment, Role } from "@fit-sihirbaz/shared";
 type AppointmentWithParties = AppointmentRow & {
   client: ClientProfile & { user: User };
   dietitian: DietitianProfile & { user: User };
+  order?: { package: { title: string } } | null;
 };
 
 export function toAppointment(row: AppointmentWithParties, viewerRole: Role): Appointment {
@@ -15,7 +16,9 @@ export function toAppointment(row: AppointmentWithParties, viewerRole: Role): Ap
     scheduledAt: row.scheduledAt.toISOString(),
     durationMinutes: row.durationMinutes,
     status: row.status,
+    type: row.type,
     meetingLink: row.meetingLink,
+    packageTitle: row.order?.package.title ?? null,
     counterpartFirstName: counterpartUser.firstName,
     counterpartLastName: counterpartUser.lastName,
   };

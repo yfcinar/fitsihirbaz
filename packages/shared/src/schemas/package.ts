@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { optionalCoerced } from "./common";
 
+export const SessionModeSchema = z.enum(["ONLINE", "IN_PERSON", "BOTH"]);
+export type SessionMode = z.infer<typeof SessionModeSchema>;
+
 export const PackageSchema = z.object({
   id: z.string().uuid(),
   dietitianId: z.string().uuid(),
@@ -8,6 +11,7 @@ export const PackageSchema = z.object({
   description: z.string().nullable(),
   durationDays: z.number().int(),
   sessionCount: z.number().int().nullable(),
+  sessionMode: SessionModeSchema,
   price: z.number(),
   currency: z.string(),
   isActive: z.boolean(),
@@ -27,6 +31,7 @@ export const CreatePackageInputSchema = z.object({
   description: z.string().max(2000).optional(),
   durationDays: z.coerce.number().int().positive(),
   sessionCount: optionalCoerced(z.coerce.number().int().positive()),
+  sessionMode: SessionModeSchema.default("BOTH"),
   price: z.coerce.number().positive(),
   currency: z.string().min(3).max(3).default("TRY"),
 });
@@ -38,6 +43,7 @@ export const UpdatePackageInputSchema = z.object({
   description: z.string().max(2000).optional(),
   durationDays: optionalCoerced(z.coerce.number().int().positive()),
   sessionCount: optionalCoerced(z.coerce.number().int().positive()),
+  sessionMode: SessionModeSchema.optional(),
   price: optionalCoerced(z.coerce.number().positive()),
   isActive: z.boolean().optional(),
 });

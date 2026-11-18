@@ -46,7 +46,7 @@ describe("PackagesService", () => {
     it("diyetisyen profili yoksa DietitianProfileNotFoundError fırlatır", async () => {
       prisma.dietitianProfile.findUnique.mockResolvedValue(null);
       await expect(
-        service.create("dyt-user-1", { title: "Paket", durationDays: 30, price: 500, currency: "TRY" }),
+        service.create("dyt-user-1", { title: "Paket", durationDays: 30, price: 500, currency: "TRY", sessionMode: "BOTH" }),
       ).rejects.toBeInstanceOf(DietitianProfileNotFoundError);
     });
 
@@ -59,6 +59,7 @@ describe("PackagesService", () => {
         durationDays: 90,
         price: 1500,
         currency: "TRY",
+        sessionMode: "ONLINE",
       });
       expect(result.price).toBe(1500);
       expect(typeof result.price).toBe("number");

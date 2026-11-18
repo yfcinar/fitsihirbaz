@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { APPOINTMENT_TYPE_LABELS, SESSION_MODE_LABELS, type AppointmentType } from "@fit-sihirbaz/shared";
 import { trpc } from "@/lib/trpc";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
 import { EmptyState } from "@/components/EmptyState";
@@ -22,6 +23,8 @@ export default function DanisanRandevularPage() {
   const dietitiansQuery = trpc.clients.getMyDietitians.useQuery();
   const [dietitianId, setDietitianId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [type, setType] = useState<AppointmentType>("ONLINE");
+  const balanceQuery = trpc.appointments.sessionBalance.useQuery({ dietitianId }, { enabled: !!dietitianId });
   const [formError, setFormError] = useState<string | null>(null);
 
   const createMutation = trpc.appointments.create.useMutation({
@@ -29,18 +32,22 @@ export default function DanisanRandevularPage() {
       setFormError(null);
       setScheduledAt("");
       utils.appointments.listForClient.invalidate();
+      utils.appointments.sessionBalance.invalidate();
     },
     onError: (err) => setFormError(err.message),
   });
 
   const cancelMutation = trpc.appointments.cancel.useMutation({
-    onSuccess: () => utils.appointments.listForClient.invalidate(),
+    onSuccess: () => {
+      utils.appointments.listForClient.invalidate();
+      utils.appointments.sessionBalance.invalidate();
+    },
   });
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setFormError(null);
-    createMutation.mutate({ dietitianId, scheduledAt });
+    createMutation.mutate({ dietitianId, scheduledAt, type });
   }
 
   const dietitians = dietitiansQuery.data ?? [];
@@ -78,9 +85,39 @@ export default function DanisanRandevularPage() {
               className="w-56"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label>Görüşme Türü</Label>
+            <Select value={type} onValueChange={(value) => setType(value as AppointmentType)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(APPOINTMENT_TYPE_LABELS) as AppointmentType[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {APPOINTMENT_TYPE_LABELS[key]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button type="submit" disabled={createMutation.isLoading}>
             {createMutation.isLoading ? "Talep ediliyor..." : "Randevu Talep Et"}
           </Button>
+          {balanceQuery.data?.hasPackages && (
+            <ul className="w-full space-y-1 text-sm text-foreground/90">
+              {balanceQuery.data.packages.map((pkg) => (
+                <li key={pkg.orderId}>
+                  {pkg.packageTitle} ({SESSION_MODE_LABELS[pkg.sessionMode]}):{" "}
+                  {pkg.expired
+                    ? "süresi doldu"
+                    : pkg.remaining === null
+                      ? "sınırsız görüşme"
+                      : `${pkg.remaining}/${pkg.sessionCount} görüşme hakkı kaldı`}
+                  {!pkg.expired && ` · ${new Date(pkg.validUntil).toLocaleDateString("tr-TR")} tarihine kadar geçerli`}
+                </li>
+              ))}
+            </ul>
+          )}
           {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
         </form>
       )}
@@ -97,7 +134,8 @@ export default function DanisanRandevularPage() {
                 {appointment.counterpartFirstName} {appointment.counterpartLastName}
               </p>
               <p className="text-sm text-muted-foreground">
-                {new Date(appointment.scheduledAt).toLocaleString("tr-TR")} · {STATUS_LABELS[appointment.status]}
+                {new Date(appointment.scheduledAt).toLocaleString("tr-TR")} · {APPOINTMENT_TYPE_LABELS[appointment.type]} · {STATUS_LABELS[appointment.status]}
+                {appointment.packageTitle ? ` · ${appointment.packageTitle}` : ""}
               </p>
             </div>
             {appointment.status === "SCHEDULED" && (

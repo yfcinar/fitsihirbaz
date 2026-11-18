@@ -1,7 +1,7 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import type { AppointmentStatus } from "@fit-sihirbaz/shared";
+import { APPOINTMENT_TYPE_LABELS, type AppointmentStatus } from "@fit-sihirbaz/shared";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,8 @@ export default function DiyetisyenRandevularPage() {
                 {appointment.counterpartFirstName} {appointment.counterpartLastName}
               </p>
               <p className="text-sm text-muted-foreground">
-                {new Date(appointment.scheduledAt).toLocaleString("tr-TR")} · {STATUS_LABELS[appointment.status]}
+                {new Date(appointment.scheduledAt).toLocaleString("tr-TR")} · {APPOINTMENT_TYPE_LABELS[appointment.type]} · {STATUS_LABELS[appointment.status]}
+                {appointment.packageTitle ? ` · ${appointment.packageTitle}` : ""}
               </p>
             </div>
             {appointment.status === "SCHEDULED" && (
