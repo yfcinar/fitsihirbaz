@@ -10,6 +10,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "seed": "ts-node seed/index.ts",
     "create-admin": "ts-node seed/create-admin.ts",
+    "import-usda": "ts-node seed/usda/import-usda.ts",
     "studio": "prisma studio"
   },
   "prisma": {

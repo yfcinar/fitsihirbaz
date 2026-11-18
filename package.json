@@ -17,7 +17,8 @@
     "db:generate": "pnpm --filter @fit-sihirbaz/db generate",
     "db:migrate": "pnpm --filter @fit-sihirbaz/db migrate",
     "db:seed": "pnpm --filter @fit-sihirbaz/db seed",
-    "db:create-admin": "pnpm --filter @fit-sihirbaz/db create-admin"
+    "db:create-admin": "pnpm --filter @fit-sihirbaz/db create-admin",
+    "db:import-usda": "pnpm --filter @fit-sihirbaz/db import-usda"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
