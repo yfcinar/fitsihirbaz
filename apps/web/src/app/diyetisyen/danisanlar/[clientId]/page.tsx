@@ -26,6 +26,7 @@ export default function DanisanDetayPage() {
   const clientsQuery = trpc.dietitians.getMyClients.useQuery();
   const client = clientsQuery.data?.find((c) => c.id === clientId);
 
+  const requestConsentMutation = trpc.showcase.requestConsent.useMutation();
   const progressQuery = trpc.progress.list.useQuery({ clientId });
   const plansQuery = trpc.dietPlans.list.useQuery({ clientId });
 
@@ -42,9 +43,22 @@ export default function DanisanDetayPage() {
           </h1>
           {client && <p className="text-sm text-muted-foreground">{client.email}</p>}
         </div>
-        <Button asChild>
-          <Link href={`/diyetisyen/danisanlar/${clientId}/plan-olustur`}>Plan Oluştur / Düzenle</Link>
-        </Button>
+        <div className="flex flex-col items-end gap-2">
+          <Button asChild>
+            <Link href={`/diyetisyen/danisanlar/${clientId}/plan-olustur`}>Plan Oluştur / Düzenle</Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={requestConsentMutation.isLoading || requestConsentMutation.isSuccess}
+            onClick={() => requestConsentMutation.mutate({ clientId })}
+          >
+            {requestConsentMutation.isSuccess ? "İzin isteği gönderildi" : "Vitrin izni iste"}
+          </Button>
+          {requestConsentMutation.error && (
+            <p className="max-w-xs text-right text-xs text-destructive">{requestConsentMutation.error.message}</p>
+          )}
+        </div>
       </div>
 
       {(clientsQuery.isError || progressQuery.isError || plansQuery.isError) && (

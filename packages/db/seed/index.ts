@@ -622,6 +622,24 @@ async function main() {
     });
   }
 
+  // Demo: Elif'in 12 haftalık kilo geçmişi ve Ayşe'nin vitrininde anonim paylaşım izni (değişim vitrini).
+  const elifLogCount = await prisma.progressLog.count({ where: { clientId: elif.id } });
+  if (elifLogCount === 0) {
+    const weights = [84.0, 82.5, 81.2, 80.0, 78.9, 78.0];
+    const dayMs = 86_400_000;
+    const todayStart = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    for (let i = 0; i < weights.length; i++) {
+      await prisma.progressLog.create({
+        data: { clientId: elif.id, logDate: new Date(todayStart.getTime() - (84 - i * 16) * dayMs), weightKg: weights[i] },
+      });
+    }
+  }
+  await prisma.showcaseConsent.upsert({
+    where: { clientId_dietitianId: { clientId: elif.id, dietitianId: ayse.id } },
+    update: {},
+    create: { clientId: elif.id, dietitianId: ayse.id, anonymous: true, includePhotos: false },
+  });
+
   // Demo: Ayşe'nin Elif için yazdığı aktif 7 günlük plan + Elif'in ilk günlerdeki takip kayıtları.
   // Diyetisyen takip görünümünü ve danışan günlüğünü boş ekranla değil dolu veriyle görmek için.
   const demoPlanTitle = "Demo: 7 Günlük Kilo Verme Planı";

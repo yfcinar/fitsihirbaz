@@ -34,6 +34,8 @@ function describePushNotification(type: string, payload: Record<string, unknown>
       return { title: "Yeni diyet planı", body: `Diyetisyeniniz size bir plan gönderdi: ${payload.title ?? ""}` };
     case "DAY_COMMENT":
       return { title: "Diyetisyeninizden yorum", body: String(payload.preview ?? "") };
+    case "SHOWCASE_REQUEST":
+      return { title: "Vitrin izni isteği", body: `${payload.dietitianName ?? "Diyetisyeniniz"} değişiminizi vitrininde göstermek için izninizi istiyor.` };
     default:
       return { title: "Fit Sihirbaz", body: "Yeni bir bildiriminiz var." };
   }

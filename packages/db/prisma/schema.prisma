@@ -189,6 +189,7 @@ model DietitianProfile {
   orders        Order[]
   conversations Conversation[]
   dayComments   DayComment[]
+  showcaseConsents ShowcaseConsent[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -231,6 +232,7 @@ model ClientProfile {
   foodLogEntries FoodLogEntry[]
   waterLogs     WaterLog[]
   dayComments   DayComment[]
+  showcaseConsents ShowcaseConsent[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -848,6 +850,7 @@ enum ConsentType {
   PRIVACY_NOTICE        // aydınlatma metnini okuduğunu onaylama
   TERMS_OF_SERVICE      // kullanım koşulları
   HEALTH_DATA_EXPLICIT  // sağlık verisinin işlenmesine açık rıza (özel nitelikli kişisel veri)
+  SHOWCASE_PROGRESS     // değişim (kilo/fotoğraf) verisinin diyetisyen vitrininde herkese açık gösterilmesi
 }
 
 // Her rıza ayrı satırdır: hangi metnin hangi sürümüne ne zaman onay verildiği (ve ne zaman
@@ -863,4 +866,24 @@ model ConsentRecord {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
+}
+
+// Danışanın değişim (kilo geçmişi, isteğe bağlı fotoğraf) verisini bir diyetisyenin herkese açık
+// vitrininde göstermeye verdiği açık, geri alınabilir izin. Varsayılan: anonim, fotoğrafsız.
+// Her verme/geri çekme ayrıca ConsentRecord (SHOWCASE_PROGRESS) olarak denetim izine yazılır.
+model ShowcaseConsent {
+  id            String    @id @default(uuid())
+  clientId      String
+  dietitianId   String
+  anonymous     Boolean   @default(true)
+  includePhotos Boolean   @default(false)
+  grantedAt     DateTime  @default(now())
+  revokedAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  client    ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, dietitianId])
+  @@index([dietitianId])
 }

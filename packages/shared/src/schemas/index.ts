@@ -20,3 +20,5 @@ export * from "./post";
 export * from "./food-source";
 
 export * from "./tracking";
+
+export * from "./showcase";

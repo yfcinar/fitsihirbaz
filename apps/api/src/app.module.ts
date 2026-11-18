@@ -18,6 +18,7 @@ import { PaymentsModule } from "./payments/payments.module";
 import { ReviewsModule } from "./reviews/reviews.module";
 import { ProgressModule } from "./progress/progress.module";
 import { TrackingModule } from "./tracking/tracking.module";
+import { ShowcaseModule } from "./showcase/showcase.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { MessagesModule } from "./messages/messages.module";
 import { ArticlesModule } from "./articles/articles.module";
@@ -54,6 +55,7 @@ import { validateEnv } from "./config/env.validation";
     ReviewsModule,
     ProgressModule,
     TrackingModule,
+    ShowcaseModule,
     AppointmentsModule,
     MessagesModule,
     ArticlesModule,

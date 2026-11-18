@@ -35,6 +35,8 @@ function describeNotification(notification: Notification): string {
       return `Diyetisyeniniz size yeni bir plan gönderdi: ${notification.payload.title ?? ""}`;
     case "DAY_COMMENT":
       return `Diyetisyeninizden yorum: ${notification.payload.preview ?? ""}`;
+    case "SHOWCASE_REQUEST":
+      return `${notification.payload.dietitianName ?? "Diyetisyeniniz"} değişiminizi vitrininde göstermek için izninizi istiyor (isteğe bağlı).`;
     default:
       return notification.type;
   }
@@ -59,6 +61,8 @@ function getNotificationLink(notification: Notification, role: Role | undefined)
       return "/danisan/plan";
     case "DAY_COMMENT":
       return "/danisan/gunluk";
+    case "SHOWCASE_REQUEST":
+      return "/danisan/ilerleme";
     case "DIETITIAN_VERIFIED":
     case "DIETITIAN_REJECTED":
     case "NEW_REVIEW":

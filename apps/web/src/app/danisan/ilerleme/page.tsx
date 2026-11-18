@@ -10,6 +10,7 @@ import { WeightChart } from "@/components/WeightChart";
 import { resolveMediaUrl } from "@/lib/media";
 import { uploadImage } from "@/lib/uploads";
 import { EmptyState } from "@/components/EmptyState";
+import { ShowcaseConsentCard } from "@/components/showcase/ShowcaseConsentCard";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +76,8 @@ export default function IlerlemePage() {
         Ölçümlerinizi ve isterseniz ilerleme fotoğraflarınızı buradan kaydedin. Kaydettiğiniz veriler
         otomatik olarak bağlı olduğunuz diyetisyeninizle paylaşılır.
       </p>
+
+      <ShowcaseConsentCard />
 
       {firstWeight !== null && latestWeight !== null && (
         <Card className="mb-6 p-4 text-sm text-foreground/90">
