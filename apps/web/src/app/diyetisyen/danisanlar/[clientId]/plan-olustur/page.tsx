@@ -57,7 +57,7 @@ export default function PlanOlusturPage() {
             {existingPlansQuery.data.map((plan) => (
               <li key={plan.id} className="flex items-center justify-between px-4 py-2">
                 <span className="text-sm">
-                  {plan.title} ({plan.status})
+                  {plan.title} ({{ DRAFT: "Taslak", ACTIVE: "Aktif", COMPLETED: "Tamamlandı", ARCHIVED: "Arşiv" }[plan.status]})
                 </span>
                 <button
                   type="button"

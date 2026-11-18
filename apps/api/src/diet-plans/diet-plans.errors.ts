@@ -10,3 +10,5 @@ export class EmptyDietPlanError extends Error {}
 export class MissingClientIdError extends Error {}
 export class DietPlanNotDraftError extends Error {}
 export class DietPlanHasNoItemsError extends Error {}
+export class DietPlanItemNotFoundError extends Error {}
+export class DietPlanCompletedError extends Error {}

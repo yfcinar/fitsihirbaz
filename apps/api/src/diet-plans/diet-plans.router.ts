@@ -12,7 +12,13 @@ import {
   DietPlanSummarySchema,
   DuplicateForNewCalorieTargetInputSchema,
   ListDietPlansInputSchema,
+  CopyDietPlanDayInputSchema,
+  RemoveDietPlanDayInputSchema,
+  RemoveDietPlanMealInputSchema,
+  RemoveDietPlanMealItemInputSchema,
+  RemovedResultSchema,
   SendDietPlanInputSchema,
+  UpdateDietPlanMealItemInputSchema,
 } from "@fit-sihirbaz/shared";
 import { dietitianProcedure, protectedProcedure, router } from "../trpc/trpc";
 import type { DietPlansService } from "./diet-plans.service";
@@ -21,7 +27,9 @@ import {
   DietPlanAccessDeniedError,
   DietPlanDayNotFoundError,
   DietPlanFoodItemNotFoundError,
+  DietPlanCompletedError,
   DietPlanHasNoItemsError,
+  DietPlanItemNotFoundError,
   DietPlanMealNotFoundError,
   DietPlanNotDraftError,
   DietPlanNotFoundError,
@@ -63,7 +71,16 @@ function mapDietPlanError(error: unknown): never {
     throw new TRPCError({ code: "BAD_REQUEST", message: "clientId zorunlu" });
   }
   if (error instanceof DietPlanNotDraftError) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Bu plan zaten gönderilmiş" });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Bu plan zaten gönderilmiş; gönderilmiş plandan silme yapılamaz (miktarı değiştirebilir veya yeni plan oluşturabilirsiniz)",
+    });
+  }
+  if (error instanceof DietPlanItemNotFoundError) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Besin kalemi bulunamadı" });
+  }
+  if (error instanceof DietPlanCompletedError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Tamamlanmış plan değiştirilemez" });
   }
   if (error instanceof DietPlanHasNoItemsError) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Plana en az bir besin eklemeden gönderemezsiniz" });
@@ -112,6 +129,64 @@ export function createDietPlansRouter(service: DietPlansService) {
       .mutation(async ({ ctx, input }) => {
         try {
           return await service.addMealItem(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    updateMealItem: dietitianProcedure
+      .input(UpdateDietPlanMealItemInputSchema)
+      .output(DietPlanMealItemViewSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.updateMealItem(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    removeMealItem: dietitianProcedure
+      .input(RemoveDietPlanMealItemInputSchema)
+      .output(RemovedResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await service.removeMealItem(ctx.user.id, input.dietPlanMealItemId);
+          return { removed: true as const };
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    removeMeal: dietitianProcedure
+      .input(RemoveDietPlanMealInputSchema)
+      .output(RemovedResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await service.removeMeal(ctx.user.id, input.dietPlanMealId);
+          return { removed: true as const };
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    removeDay: dietitianProcedure
+      .input(RemoveDietPlanDayInputSchema)
+      .output(RemovedResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await service.removeDay(ctx.user.id, input.dietPlanDayId);
+          return { removed: true as const };
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    copyDay: dietitianProcedure
+      .input(CopyDietPlanDayInputSchema)
+      .output(DietPlanDayViewSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.copyDay(ctx.user.id, input.dietPlanDayId);
         } catch (error) {
           mapDietPlanError(error);
         }

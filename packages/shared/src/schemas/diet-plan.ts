@@ -115,6 +115,29 @@ export const SendDietPlanInputSchema = z.object({
 });
 export type SendDietPlanInput = z.infer<typeof SendDietPlanInputSchema>;
 
+// Plan düzenleme: miktar/birim güncelleme (taslak ve gönderilmiş planda), silme ve gün kopyalama
+// (yalnızca taslakta; gönderilmiş planda silmek danışanın günlük kayıtlarını da silerdi).
+export const UpdateDietPlanMealItemInputSchema = z.object({
+  dietPlanMealItemId: z.string().uuid(),
+  quantity: z.coerce.number().positive(),
+  unit: MeasurementUnitSchema,
+});
+export type UpdateDietPlanMealItemInput = z.infer<typeof UpdateDietPlanMealItemInputSchema>;
+
+export const RemoveDietPlanMealItemInputSchema = z.object({ dietPlanMealItemId: z.string().uuid() });
+export type RemoveDietPlanMealItemInput = z.infer<typeof RemoveDietPlanMealItemInputSchema>;
+
+export const RemoveDietPlanMealInputSchema = z.object({ dietPlanMealId: z.string().uuid() });
+export type RemoveDietPlanMealInput = z.infer<typeof RemoveDietPlanMealInputSchema>;
+
+export const RemoveDietPlanDayInputSchema = z.object({ dietPlanDayId: z.string().uuid() });
+export type RemoveDietPlanDayInput = z.infer<typeof RemoveDietPlanDayInputSchema>;
+
+export const CopyDietPlanDayInputSchema = z.object({ dietPlanDayId: z.string().uuid() });
+export type CopyDietPlanDayInput = z.infer<typeof CopyDietPlanDayInputSchema>;
+
+export const RemovedResultSchema = z.object({ removed: z.literal(true) });
+
 export const DuplicateForNewCalorieTargetInputSchema = z.object({
   dietPlanId: z.string().uuid(),
   newTargetCalories: z.coerce.number().int().positive(),

@@ -11,6 +11,7 @@ import type {
   DietPlanSummary,
   DuplicateForNewCalorieTargetInput,
   Role,
+  UpdateDietPlanMealItemInput,
 } from "@fit-sihirbaz/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -19,7 +20,9 @@ import {
   DietPlanAccessDeniedError,
   DietPlanDayNotFoundError,
   DietPlanFoodItemNotFoundError,
+  DietPlanCompletedError,
   DietPlanHasNoItemsError,
+  DietPlanItemNotFoundError,
   DietPlanMealNotFoundError,
   DietPlanNotDraftError,
   DietPlanNotFoundError,
@@ -28,7 +31,13 @@ import {
   EmptyDietPlanError,
   MissingClientIdError,
 } from "./diet-plans.errors";
-import { buildMealItemView, type DietPlanWithHierarchy, toDietPlanDetail, toDietPlanSummary } from "./diet-plans.mapper";
+import {
+  buildDayView,
+  buildMealItemView,
+  type DietPlanWithHierarchy,
+  toDietPlanDetail,
+  toDietPlanSummary,
+} from "./diet-plans.mapper";
 
 const RECIPE_INCLUDE = {
   ingredients: { include: { foodItem: { include: { nutrientData: true } } } },
@@ -185,6 +194,130 @@ export class DietPlansService {
     });
 
     return buildMealItemView({ ...item, foodItem, recipe: null });
+  }
+
+  // Miktar/birim güncellemesi hem taslakta hem gönderilmiş (ACTIVE) planda yapılabilir; kayıt silinmediği
+  // için danışanın günlük işaretleri korunur. Tamamlanmış plan değiştirilemez.
+  async updateMealItem(dietitianUserId: string, input: UpdateDietPlanMealItemInput): Promise<DietPlanMealItemView> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const item = await this.prisma.dietPlanMealItem.findUnique({
+      where: { id: input.dietPlanMealItemId },
+      include: { dietPlanMeal: { include: { dietPlanDay: { include: { dietPlan: true } } } } },
+    });
+    if (!item) {
+      throw new DietPlanItemNotFoundError();
+    }
+    const plan = item.dietPlanMeal.dietPlanDay.dietPlan;
+    if (plan.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+    if (plan.status !== "DRAFT" && plan.status !== "ACTIVE") {
+      throw new DietPlanCompletedError();
+    }
+    // Tarif kalemleri her zaman porsiyon cinsindendir.
+    const unit = item.recipeId ? "PORTION" : input.unit;
+
+    const updated = await this.prisma.dietPlanMealItem.update({
+      where: { id: item.id },
+      data: { quantity: input.quantity, unit },
+      include: MEAL_ITEM_INCLUDE,
+    });
+    return buildMealItemView(updated);
+  }
+
+  async removeMealItem(dietitianUserId: string, itemId: string): Promise<void> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const item = await this.prisma.dietPlanMealItem.findUnique({
+      where: { id: itemId },
+      include: { dietPlanMeal: { include: { dietPlanDay: { include: { dietPlan: true } } } } },
+    });
+    if (!item) {
+      throw new DietPlanItemNotFoundError();
+    }
+    this.assertDraftOwnedBy(item.dietPlanMeal.dietPlanDay.dietPlan, dietitianProfile.id);
+    await this.prisma.dietPlanMealItem.delete({ where: { id: itemId } });
+  }
+
+  async removeMeal(dietitianUserId: string, mealId: string): Promise<void> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const meal = await this.prisma.dietPlanMeal.findUnique({
+      where: { id: mealId },
+      include: { dietPlanDay: { include: { dietPlan: true } } },
+    });
+    if (!meal) {
+      throw new DietPlanMealNotFoundError();
+    }
+    this.assertDraftOwnedBy(meal.dietPlanDay.dietPlan, dietitianProfile.id);
+    await this.prisma.dietPlanMeal.delete({ where: { id: mealId } });
+  }
+
+  async removeDay(dietitianUserId: string, dayId: string): Promise<void> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const day = await this.prisma.dietPlanDay.findUnique({ where: { id: dayId }, include: { dietPlan: true } });
+    if (!day) {
+      throw new DietPlanDayNotFoundError();
+    }
+    this.assertDraftOwnedBy(day.dietPlan, dietitianProfile.id);
+    await this.prisma.dietPlanDay.delete({ where: { id: dayId } });
+  }
+
+  // Bir günü (öğünleri ve besinleriyle) planın sonuna yeni gün olarak kopyalar; haftalık
+  // diyetlerde aynı günü tekrar tekrar elle girme ihtiyacını ortadan kaldırır.
+  async copyDay(dietitianUserId: string, dayId: string): Promise<DietPlanDayView> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const day = await this.prisma.dietPlanDay.findUnique({
+      where: { id: dayId },
+      include: { dietPlan: true, meals: { orderBy: { createdAt: "asc" }, include: { items: true } } },
+    });
+    if (!day) {
+      throw new DietPlanDayNotFoundError();
+    }
+    this.assertDraftOwnedBy(day.dietPlan, dietitianProfile.id);
+
+    const newDayId = await this.prisma.$transaction(async (tx) => {
+      const last = await tx.dietPlanDay.aggregate({
+        where: { dietPlanId: day.dietPlanId },
+        _max: { dayNumber: true },
+      });
+      const newDay = await tx.dietPlanDay.create({
+        data: { dietPlanId: day.dietPlanId, dayNumber: (last._max.dayNumber ?? 0) + 1 },
+      });
+      for (const meal of day.meals) {
+        const newMeal = await tx.dietPlanMeal.create({
+          data: { dietPlanDayId: newDay.id, mealType: meal.mealType, plannedTime: meal.plannedTime },
+        });
+        for (const item of meal.items) {
+          await tx.dietPlanMealItem.create({
+            data: {
+              dietPlanMealId: newMeal.id,
+              foodItemId: item.foodItemId,
+              recipeId: item.recipeId,
+              quantity: item.quantity,
+              unit: item.unit,
+            },
+          });
+        }
+      }
+      return newDay.id;
+    });
+
+    const copied = await this.prisma.dietPlanDay.findUnique({
+      where: { id: newDayId },
+      include: PLAN_HIERARCHY_INCLUDE.days.include,
+    });
+    if (!copied) {
+      throw new DietPlanDayNotFoundError();
+    }
+    return buildDayView(copied);
+  }
+
+  private assertDraftOwnedBy(plan: { dietitianId: string | null; status: string }, dietitianProfileId: string) {
+    if (plan.dietitianId !== dietitianProfileId) {
+      throw new DietPlanAccessDeniedError();
+    }
+    if (plan.status !== "DRAFT") {
+      throw new DietPlanNotDraftError();
+    }
   }
 
   async getById(userId: string, role: Role, dietPlanId: string): Promise<DietPlanDetail> {

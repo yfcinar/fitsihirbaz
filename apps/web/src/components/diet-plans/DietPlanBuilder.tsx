@@ -5,13 +5,26 @@ import { trpc } from "@/lib/trpc";
 import type { MealType } from "@fit-sihirbaz/shared";
 import { MealItemAdder } from "./MealItemAdder";
 import { MEAL_TYPE_LABELS, TotalsBadge } from "./diet-plan-ui";
-import { UNIT_LABELS } from "@/components/tracking/tracking-ui";
+import { MealItemRow } from "./MealItemRow";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// Günün kalorisi hedefe göre ne kadar sapıyor: ±%5 içinde yeşil, aşırı sapmada uyarı rengi.
+function TargetDelta({ calories, target }: { calories: number; target: number | null }) {
+  if (!target || calories <= 0) return null;
+  const diff = Math.round(calories - target);
+  const ratio = Math.abs(diff) / target;
+  const tone = ratio <= 0.05 ? "text-primary" : ratio <= 0.15 ? "text-foreground" : "text-destructive";
+  return (
+    <span className={`text-xs ${tone}`}>
+      {diff === 0 ? "Hedefte" : `Hedefe göre ${diff > 0 ? "+" : ""}${diff} kcal`}
+    </span>
+  );
+}
 
 export function DietPlanBuilder({ planId }: { planId: string }) {
   const utils = trpc.useUtils();
@@ -33,6 +46,9 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
   });
 
   const addDayMutation = trpc.dietPlans.addDay.useMutation({ onSuccess: refetchPlan });
+  const copyDayMutation = trpc.dietPlans.copyDay.useMutation({ onSuccess: refetchPlan });
+  const removeDayMutation = trpc.dietPlans.removeDay.useMutation({ onSuccess: refetchPlan });
+  const removeMealMutation = trpc.dietPlans.removeMeal.useMutation({ onSuccess: refetchPlan });
   const addMealMutation = trpc.dietPlans.addMeal.useMutation({ onSuccess: refetchPlan });
   const duplicateMutation = trpc.dietPlans.duplicateForNewCalorieTarget.useMutation({
     onSuccess: (result) => {
@@ -49,6 +65,7 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
     return <p className="text-muted-foreground">Plan yükleniyor...</p>;
   }
   const plan = planQuery.data;
+  const isDraft = plan.status === "DRAFT";
 
   return (
     <div>
@@ -130,7 +147,33 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
       {plan.days.map((day) => (
         <Card key={day.id} className="mb-4 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-medium text-foreground">Gün {day.dayNumber}</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="font-medium text-foreground">Gün {day.dayNumber}</h3>
+              <TargetDelta calories={day.totals.calories} target={plan.targetCalories} />
+              {isDraft && (
+                <>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    disabled={copyDayMutation.isLoading}
+                    onClick={() => copyDayMutation.mutate({ dietPlanDayId: day.id })}
+                  >
+                    Günü kopyala
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-destructive hover:underline"
+                    onClick={() => {
+                      if (window.confirm(`Gün ${day.dayNumber} ve içindeki tüm öğünler silinsin mi?`)) {
+                        removeDayMutation.mutate({ dietPlanDayId: day.id });
+                      }
+                    }}
+                  >
+                    Günü sil
+                  </button>
+                </>
+              )}
+            </div>
             <TotalsBadge totals={day.totals} />
           </div>
 
@@ -143,16 +186,24 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
                 </p>
                 <TotalsBadge totals={meal.totals} />
               </div>
-              <ul className="space-y-1 text-sm text-foreground/90">
+              <ul className="space-y-1.5">
                 {meal.items.map((item) => (
-                  <li key={item.id} className="flex justify-between">
-                    <span>
-                      {item.itemName} — {item.quantity} {UNIT_LABELS[item.unit]}
-                    </span>
-                    <span className="text-muted-foreground">{item.calories} kcal</span>
-                  </li>
+                  <MealItemRow key={item.id} item={item} canDelete={isDraft} onChanged={refetchPlan} />
                 ))}
               </ul>
+              {isDraft && (
+                <button
+                  type="button"
+                  className="mt-1 text-xs text-destructive hover:underline"
+                  onClick={() => {
+                    if (window.confirm("Bu öğün ve içindeki tüm besinler silinsin mi?")) {
+                      removeMealMutation.mutate({ dietPlanMealId: meal.id });
+                    }
+                  }}
+                >
+                  Öğünü sil
+                </button>
+              )}
               <MealItemAdder mealId={meal.id} onAdded={refetchPlan} />
             </div>
           ))}
@@ -199,7 +250,12 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
         variant="outline"
         disabled={addDayMutation.isLoading}
         data-testid="add-day-button"
-        onClick={() => addDayMutation.mutate({ dietPlanId: planId, dayNumber: plan.days.length + 1 })}
+        onClick={() =>
+          addDayMutation.mutate({
+            dietPlanId: planId,
+            dayNumber: Math.max(0, ...plan.days.map((day) => day.dayNumber)) + 1,
+          })
+        }
       >
         + Gün Ekle
       </Button>

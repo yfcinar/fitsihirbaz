@@ -92,7 +92,7 @@ function buildMealView(meal: MealRow): DietPlanMealView {
   };
 }
 
-function buildDayView(day: DayRow): DietPlanDayView {
+export function buildDayView(day: DayRow): DietPlanDayView {
   const meals = day.meals.map(buildMealView);
   const totals = meals.reduce((acc, meal) => addTotals(acc, meal.totals), zeroTotals());
   return { id: day.id, dayNumber: day.dayNumber, meals, totals };
