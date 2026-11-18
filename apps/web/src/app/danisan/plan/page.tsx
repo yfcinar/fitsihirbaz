@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { MEAL_TYPE_LABELS, TotalsBadge } from "@/components/diet-plans/diet-plan-ui";
 import { EmptyState } from "@/components/EmptyState";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
+import { UNIT_LABELS } from "@/components/tracking/tracking-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -104,7 +105,7 @@ export default function DiyetlerimPage() {
                 {meal.items.map((item) => (
                   <li key={item.id} className="flex justify-between">
                     <span>
-                      {item.itemName} — {item.quantity} {item.unit}
+                      {item.itemName} — {item.quantity} {UNIT_LABELS[item.unit]}
                     </span>
                     <span className="text-muted-foreground">{item.calories} kcal</span>
                   </li>

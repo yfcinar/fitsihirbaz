@@ -15,7 +15,8 @@ export default function DanisanPanelPage() {
   const progressQuery = trpc.progress.list.useQuery({});
   const dietitiansQuery = trpc.clients.getMyDietitians.useQuery();
 
-  const activePlan = plansQuery.data?.[0];
+  // Liste aktif ve tamamlanmış planları içerir; panelde her zaman aktif olan gösterilir.
+  const activePlan = plansQuery.data?.find((plan) => plan.status === "ACTIVE") ?? plansQuery.data?.[0];
   const now = Date.now();
   const upcomingAppointment = (appointmentsQuery.data ?? [])
     .filter((a) => a.status === "SCHEDULED" && new Date(a.scheduledAt).getTime() >= now)
@@ -52,7 +53,7 @@ export default function DanisanPanelPage() {
             <>
               <p className="mt-2 font-medium text-foreground">{activePlan.title}</p>
               <p className="text-sm text-muted-foreground">
-                Hedef: {activePlan.targetCalories ?? "-"} kcal · {activePlan.status}
+                Hedef: {activePlan.targetCalories ?? "-"} kcal · {activePlan.status === "ACTIVE" ? "Aktif" : "Tamamlandı"}
               </p>
               <Link href="/danisan/plan" className="mt-2 inline-block text-sm font-medium text-primary hover:underline">
                 Planı Görüntüle →
