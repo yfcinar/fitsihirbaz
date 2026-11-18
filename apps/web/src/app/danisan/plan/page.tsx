@@ -1,13 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { MEAL_TYPE_LABELS, TotalsBadge } from "@/components/diet-plans/diet-plan-ui";
+import { EmptyState } from "@/components/EmptyState";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-export default function DanisanPlanPage() {
+export default function DiyetlerimPage() {
   const plansQuery = trpc.dietPlans.list.useQuery({});
-  const activePlanId = plansQuery.data?.[0]?.id;
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
+  // Liste yeniden eskiye sıralı; aktif plan varsa o, yoksa en yeni plan varsayılan seçilir.
+  const plans = plansQuery.data ?? [];
+  const defaultPlanId = plans.find((plan) => plan.status === "ACTIVE")?.id ?? plans[0]?.id;
+  const activePlanId = selectedPlanId ?? defaultPlanId;
   const planQuery = trpc.dietPlans.getById.useQuery({ id: activePlanId ?? "" }, { enabled: !!activePlanId });
 
   if (plansQuery.isLoading) {
@@ -19,7 +28,12 @@ export default function DanisanPlanPage() {
   }
 
   if (!activePlanId) {
-    return <p className="text-muted-foreground">Henüz bir diyet planınız bulunmuyor.</p>;
+    return (
+      <EmptyState
+        title="Henüz size gönderilmiş bir diyet yok"
+        description="Diyetisyeniniz bir plan hazırlayıp gönderdiğinde burada görünür ve size bildirim gelir."
+      />
+    );
   }
 
   if (planQuery.isError) {
@@ -34,10 +48,30 @@ export default function DanisanPlanPage() {
 
   return (
     <div>
+      {plans.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {plans.map((item) => (
+            <Button
+              key={item.id}
+              size="sm"
+              variant={item.id === activePlanId ? "default" : "outline"}
+              onClick={() => setSelectedPlanId(item.id)}
+            >
+              {item.title} {item.status === "ACTIVE" ? "(Aktif)" : "(Tamamlandı)"}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <Card className="mb-6 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">{plan.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-foreground">{plan.title}</h1>
+              <Badge variant={plan.status === "ACTIVE" ? "success" : "secondary"}>
+                {plan.status === "ACTIVE" ? "Aktif" : "Tamamlandı"}
+              </Badge>
+            </div>
             <p className="text-sm text-muted-foreground">
               {plan.startDate}
               {plan.endDate ? ` – ${plan.endDate}` : ""} · Hedef: {plan.targetCalories ?? "-"} kcal

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   AddDayCommentInput,
   AddFoodEntryInput,
@@ -14,6 +14,7 @@ import type {
   WaterEntry,
 } from "@fit-sihirbaz/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { calculateItemNutrients } from "../diet-plans/diet-plans.calculator";
 import {
   ClientProfileNotFoundError,
@@ -83,7 +84,12 @@ function assertNotFuture(date: Date): void {
 
 @Injectable()
 export class TrackingService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TrackingService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // ---- Danışan: yazma ----
 
@@ -228,6 +234,20 @@ export class TrackingService {
       },
       include: COMMENT_INCLUDE,
     });
+
+    // Bildirim best-effort: gönderilemese de yorum kaydedilmiştir.
+    try {
+      const client = await this.prisma.clientProfile.findUnique({ where: { id: clientId } });
+      if (client) {
+        await this.notifications.create(client.userId, "DAY_COMMENT", {
+          logDate: input.logDate,
+          preview: input.body.slice(0, 80),
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`Yorum bildirimi gönderilemedi: ${(error as Error).message}`);
+    }
+
     return toDayComment(row);
   }
 

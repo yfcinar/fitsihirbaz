@@ -31,6 +31,10 @@ function describeNotification(notification: Notification): string {
       return "Diyetisyen profiliniz onaylanmadı. Detaylar için bizimle iletişime geçin.";
     case "NEW_REVIEW":
       return `Yeni bir yorum aldınız: ${notification.payload.rating ?? ""} yıldız`;
+    case "DIET_PLAN_SENT":
+      return `Diyetisyeniniz size yeni bir plan gönderdi: ${notification.payload.title ?? ""}`;
+    case "DAY_COMMENT":
+      return `Diyetisyeninizden yorum: ${notification.payload.preview ?? ""}`;
     default:
       return notification.type;
   }
@@ -51,6 +55,10 @@ function getNotificationLink(notification: Notification, role: Role | undefined)
       return "/danisan/panel";
     case "NEW_ORDER":
       return "/diyetisyen/siparisler";
+    case "DIET_PLAN_SENT":
+      return "/danisan/plan";
+    case "DAY_COMMENT":
+      return "/danisan/gunluk";
     case "DIETITIAN_VERIFIED":
     case "DIETITIAN_REJECTED":
     case "NEW_REVIEW":

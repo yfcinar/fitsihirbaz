@@ -1,4 +1,5 @@
 import { PrismaService } from "../prisma/prisma.service";
+import type { NotificationsService } from "../notifications/notifications.service";
 import { TrackingService } from "./tracking.service";
 import {
   EntryNotFoundError,
@@ -48,6 +49,7 @@ describe("TrackingService", () => {
     waterLog: { create: jest.Mock; deleteMany: jest.Mock; findMany: jest.Mock };
     dayComment: { create: jest.Mock; findMany: jest.Mock };
   };
+  let notifications: { create: jest.Mock };
   let service: TrackingService;
 
   beforeEach(() => {
@@ -63,7 +65,8 @@ describe("TrackingService", () => {
       waterLog: { create: jest.fn(), deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       dayComment: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new TrackingService(prisma as unknown as PrismaService);
+    notifications = { create: jest.fn().mockResolvedValue(undefined) };
+    service = new TrackingService(prisma as unknown as PrismaService, notifications as unknown as NotificationsService);
   });
 
   describe("setMealItemStatus", () => {
@@ -255,7 +258,25 @@ describe("TrackingService", () => {
       });
 
       expect(result.body).toBe("Harika gidiyorsun");
+      expect(notifications.create).toHaveBeenCalledWith("user-client", "DAY_COMMENT", {
+        logDate: "2026-03-01",
+        preview: "Harika gidiyorsun",
+      });
       expect(prisma.dayComment.create.mock.calls[0][0].data.dietitianId).toBe(DIETITIAN.id);
+    });
+
+    it("bildirim gönderilemese de yorum başarıyla döner", async () => {
+      prisma.dayComment.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "c1",
+        createdAt: new Date(),
+        ...data,
+        dietitian: { user: { firstName: "Ayşe", lastName: "Yılmaz" } },
+      }));
+      notifications.create.mockRejectedValue(new Error("push down"));
+
+      await expect(
+        service.addComment(DIETITIAN.userId, { clientId: CLIENT.id, logDate: "2026-03-01", body: "Merhaba" }),
+      ).resolves.toMatchObject({ body: "Merhaba" });
     });
 
     it("bağlı olmayan diyetisyen yorum ekleyemez", async () => {

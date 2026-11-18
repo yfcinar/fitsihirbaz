@@ -8,3 +8,5 @@ export class ClientNotLinkedError extends Error {}
 export class DietitianProfileNotFoundError extends Error {}
 export class EmptyDietPlanError extends Error {}
 export class MissingClientIdError extends Error {}
+export class DietPlanNotDraftError extends Error {}
+export class DietPlanHasNoItemsError extends Error {}

@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import type { MealType } from "@fit-sihirbaz/shared";
 import { MealItemAdder } from "./MealItemAdder";
 import { MEAL_TYPE_LABELS, TotalsBadge } from "./diet-plan-ui";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,14 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
   function refetchPlan() {
     utils.dietPlans.getById.invalidate({ id: planId });
   }
+
+  const [confirmSend, setConfirmSend] = useState(false);
+  const sendMutation = trpc.dietPlans.send.useMutation({
+    onSuccess: () => {
+      setConfirmSend(false);
+      refetchPlan();
+    },
+  });
 
   const addDayMutation = trpc.dietPlans.addDay.useMutation({ onSuccess: refetchPlan });
   const addMealMutation = trpc.dietPlans.addMeal.useMutation({ onSuccess: refetchPlan });
@@ -55,6 +64,36 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
             <p className="text-sm font-medium text-foreground">Plan Toplamı</p>
             <TotalsBadge totals={plan.totals} />
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-3">
+          {plan.status === "DRAFT" ? (
+            <>
+              <Badge variant="warning">Taslak — danışan henüz görmüyor</Badge>
+              {confirmSend ? (
+                <>
+                  <span className="text-sm text-foreground/90">
+                    Plan danışana gönderilecek ve önceki aktif planınız tamamlanacak. Emin misiniz?
+                  </span>
+                  <Button size="sm" disabled={sendMutation.isLoading} onClick={() => sendMutation.mutate({ dietPlanId: planId })}>
+                    {sendMutation.isLoading ? "Gönderiliyor..." : "Evet, Gönder"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setConfirmSend(false)}>
+                    Vazgeç
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" onClick={() => setConfirmSend(true)}>
+                  Danışana Gönder
+                </Button>
+              )}
+            </>
+          ) : (
+            <Badge variant="success">
+              {plan.status === "ACTIVE" ? "Danışana gönderildi — aktif" : "Tamamlandı"}
+            </Badge>
+          )}
+          {sendMutation.error && <p className="text-sm text-destructive">{sendMutation.error.message}</p>}
         </div>
       </Card>
 
