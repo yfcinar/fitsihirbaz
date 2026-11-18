@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { WeightChart } from "@/components/WeightChart";
 import { resolveMediaUrl } from "@/lib/media";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
+import { ClientTrackingPanel } from "@/components/tracking/ClientTrackingPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,8 @@ export default function DanisanDetayPage() {
           ))}
         </ul>
       </div>
+
+      <ClientTrackingPanel clientId={clientId} />
 
       <div>
         <h2 className="mb-2 text-lg font-medium text-foreground">İlerleme</h2>

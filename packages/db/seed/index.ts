@@ -554,6 +554,92 @@ async function main() {
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "MALE", value: 38 });
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "FEMALE", value: 25 });
 
+  // Demo: Ayşe'nin Elif için yazdığı aktif 7 günlük plan + Elif'in ilk günlerdeki takip kayıtları.
+  // Diyetisyen takip görünümünü ve danışan günlüğünü boş ekranla değil dolu veriyle görmek için.
+  const demoPlanTitle = "Demo: 7 Günlük Kilo Verme Planı";
+  const existingDemoPlan = await prisma.dietPlan.findFirst({ where: { clientId: elif.id, title: demoPlanTitle } });
+  if (!existingDemoPlan) {
+    const todayUtc = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const planStart = new Date(todayUtc.getTime() - 3 * 86_400_000);
+    const foodByName = async (name: string) => {
+      const food = await prisma.foodItem.findFirst({ where: { name } });
+      if (!food) {
+        throw new Error(`Demo plan için besin bulunamadı: ${name}`);
+      }
+      return food;
+    };
+    const mealTemplate: Array<{ mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK"; items: Array<[string, number]> }> = [
+      { mealType: "BREAKFAST", items: [["Yulaf Ezmesi", 50], ["Yumurta", 100]] },
+      { mealType: "LUNCH", items: [["Tavuk Göğsü (haşlanmış)", 120], ["Kırmızı Mercimek (pişmiş)", 150]] },
+      { mealType: "SNACK", items: [["Elma", 150], ["Badem", 20]] },
+      { mealType: "DINNER", items: [["Yoğurt (yağsız)", 200], ["Zeytinyağı", 10]] },
+    ];
+    const plan = await prisma.dietPlan.create({
+      data: {
+        clientId: elif.id,
+        dietitianId: ayse.id,
+        title: demoPlanTitle,
+        startDate: planStart,
+        endDate: new Date(planStart.getTime() + 6 * 86_400_000),
+        targetCalories: 1600,
+        status: "ACTIVE",
+      },
+    });
+    for (let dayNumber = 1; dayNumber <= 7; dayNumber++) {
+      const day = await prisma.dietPlanDay.create({ data: { dietPlanId: plan.id, dayNumber } });
+      for (const template of mealTemplate) {
+        const meal = await prisma.dietPlanMeal.create({ data: { dietPlanDayId: day.id, mealType: template.mealType } });
+        for (const [foodName, grams] of template.items) {
+          const food = await foodByName(foodName);
+          const item = await prisma.dietPlanMealItem.create({
+            data: { dietPlanMealId: meal.id, foodItemId: food.id, quantity: grams, unit: "GRAM" },
+          });
+          if (dayNumber <= 3) {
+            // 1. ve 2. gün büyük ölçüde uyulmuş, 3. gün (dün) kısmen atlanmış gibi.
+            const status = dayNumber === 3 && template.mealType === "DINNER" ? "SKIPPED" : dayNumber === 3 && template.mealType === "SNACK" ? "PARTIAL" : "EATEN";
+            await prisma.mealItemLog.create({
+              data: {
+                clientId: elif.id,
+                dietPlanMealItemId: item.id,
+                logDate: new Date(planStart.getTime() + (dayNumber - 1) * 86_400_000),
+                status,
+              },
+            });
+          }
+        }
+      }
+    }
+    await prisma.waterLog.createMany({
+      data: [
+        { clientId: elif.id, logDate: planStart, amountMl: 500 },
+        { clientId: elif.id, logDate: planStart, amountMl: 750 },
+        { clientId: elif.id, logDate: new Date(planStart.getTime() + 86_400_000), amountMl: 1500 },
+      ],
+    });
+    await prisma.foodLogEntry.create({
+      data: {
+        clientId: elif.id,
+        logDate: new Date(planStart.getTime() + 86_400_000),
+        mealType: "SNACK",
+        customName: "Simit",
+        quantity: 1,
+        unit: "PIECE",
+        calories: 290,
+        protein: 9,
+        carbs: 55,
+        fat: 5,
+      },
+    });
+    await prisma.dayComment.create({
+      data: {
+        clientId: elif.id,
+        dietitianId: ayse.id,
+        logDate: planStart,
+        body: "İlk günü harika tamamlamışsın, su tüketimini de artırmaya devam et!",
+      },
+    });
+  }
+
   console.log(
     `Seed tamamlandı: 1 FoodSource, ${sampleFoods.length} FoodItem, 1 admin, 3 diyetisyen, 3 danışan, 3 paket, 2 ödenmiş sipariş, 2 yorum, 1 randevu, 7 referans alım değeri (yer tutucu).`,
   );
