@@ -36,7 +36,13 @@ function mapPaymentError(error: unknown): never {
   throw error;
 }
 
-export function createPaymentsRouter(service: PaymentsService) {
+export interface PaymentsRouterOptions {
+  // false iken (production varsayılanı) mock ödeme sonucu simüle etme kapalıdır; aksi halde
+  // herhangi bir danışan kendi ödemesini "başarılı" yapıp ücretsiz paket alabilirdi.
+  allowMockPayments: boolean;
+}
+
+export function createPaymentsRouter(service: PaymentsService, options: PaymentsRouterOptions) {
   return router({
     initiate: clientProcedure
       .input(InitiatePaymentInputSchema)
@@ -64,6 +70,9 @@ export function createPaymentsRouter(service: PaymentsService) {
       .input(SimulatePaymentOutcomeInputSchema)
       .output(PaymentSchema)
       .mutation(async ({ ctx, input }) => {
+        if (!options.allowMockPayments) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Mock ödeme bu ortamda kapalı" });
+        }
         try {
           return await service.simulateOutcome(ctx.user.id, input.paymentId, input.outcome);
         } catch (error) {

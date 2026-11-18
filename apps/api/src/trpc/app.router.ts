@@ -60,6 +60,7 @@ interface AppRouterDeps {
   notificationsService: NotificationsService;
   referenceIntakesService: ReferenceIntakesService;
   postsService: PostsService;
+  allowMockPayments: boolean;
 }
 
 export function createAppRouter(deps: AppRouterDeps) {
@@ -73,7 +74,7 @@ export function createAppRouter(deps: AppRouterDeps) {
     dietPlans: createDietPlansRouter(deps.dietPlansService),
     packages: createPackagesRouter(deps.packagesService),
     orders: createOrdersRouter(deps.ordersService),
-    payments: createPaymentsRouter(deps.paymentsService),
+    payments: createPaymentsRouter(deps.paymentsService, { allowMockPayments: deps.allowMockPayments }),
     reviews: createReviewsRouter(deps.reviewsService),
     progress: createProgressRouter(deps.progressService),
     appointments: createAppointmentsRouter(deps.appointmentsService),

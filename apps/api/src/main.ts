@@ -34,7 +34,7 @@ import { createContextFactory } from "./trpc/context";
 import type { Env } from "./config/env.validation";
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
   app.use(cookieParser());
@@ -73,6 +73,7 @@ async function bootstrap() {
     notificationsService: app.get(NotificationsService),
     referenceIntakesService: app.get(ReferenceIntakesService),
     postsService: app.get(PostsService),
+    allowMockPayments: config.get("ALLOW_MOCK_PAYMENTS", { infer: true }),
   });
   app.use(
     "/trpc",
