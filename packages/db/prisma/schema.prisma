@@ -133,6 +133,7 @@ model User {
   postLikes        PostLike[]
   postComments     PostComment[]
   emailTokens      EmailToken[]
+  refreshTokens    RefreshToken[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -705,4 +706,20 @@ model PostComment {
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([postId])
+}
+
+// Oturum (refresh token) kaydı. JWT'nin kendisi saklanmaz; sadece jti (id) ve ait olduğu
+// "aile" (bir girişten türeyen zincir) tutulur. Her yenilemede eski kayıt iptal edilir
+// (rotation); iptal edilmiş bir token tekrar kullanılırsa tüm aile iptal edilir (çalıntı tespiti).
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
 }

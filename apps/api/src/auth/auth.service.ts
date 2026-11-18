@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import bcrypt from "bcryptjs";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AuthResponse, AuthTokens, LoginInput, PublicUser, RegisterInput } from "@fit-sihirbaz/shared";
 import type { User } from "@fit-sihirbaz/db";
 import { PrismaService } from "../prisma/prisma.service";
@@ -20,6 +20,7 @@ import {
 } from "./auth.errors";
 
 const BCRYPT_SALT_ROUNDS = 10;
+const REFRESH_REUSE_GRACE_MS = 10 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -63,7 +64,7 @@ export class AuthService {
       this.logger.error(`Doğrulama e-postası gönderilemedi (userId=${user.id})`, error),
     );
 
-    return this.buildAuthResponse(user);
+    return await this.buildAuthResponse(user);
   }
 
   async login(input: LoginInput): Promise<AuthResponse> {
@@ -80,23 +81,68 @@ export class AuthService {
       throw new InvalidCredentialsError();
     }
 
-    return this.buildAuthResponse(user);
+    return await this.buildAuthResponse(user);
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
-    let userId: string;
+    let payload: ReturnType<TokenService["verifyRefreshToken"]>;
     try {
-      userId = this.tokens.verifyRefreshToken(refreshToken).sub;
+      payload = this.tokens.verifyRefreshToken(refreshToken);
     } catch {
       throw new InvalidRefreshTokenError();
     }
+    // jti/fam taşımayan (rotasyon öncesi üretilmiş) tokenlar geçersiz sayılır.
+    if (!payload.jti || !payload.fam) {
+      throw new InvalidRefreshTokenError();
+    }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const record = await this.prisma.refreshToken.findUnique({ where: { id: payload.jti } });
+    if (!record || record.userId !== payload.sub) {
+      throw new InvalidRefreshTokenError();
+    }
+
+    if (record.revokedAt) {
+      // İptal edilmiş token yeniden geldi: ya çalıntı ya da çakışan iki istek. Kısa bir
+      // pencere içindeki tekrar (aynı anda iki sekmenin yenilemesi) oturumu kapatmaz; daha
+      // geç gelen tekrar ise tüm aileyi (o girişten türeyen tüm tokenlar) iptal eder.
+      if (Date.now() - record.revokedAt.getTime() > REFRESH_REUSE_GRACE_MS) {
+        await this.revokeFamily(record.familyId);
+      }
+      throw new InvalidRefreshTokenError();
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.isActive) {
       throw new InvalidRefreshTokenError();
     }
 
-    return this.tokens.issuePair(user.id, user.role);
+    // Eşzamanlı iki isteğin aynı token'ı kullanmasını engelleyen koşullu iptal: sadece biri kazanır.
+    const revoked = await this.prisma.refreshToken.updateMany({
+      where: { id: record.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (revoked.count === 0) {
+      throw new InvalidRefreshTokenError();
+    }
+
+    return this.issueSession(user, record.familyId);
+  }
+
+  // Refresh token biliniyorsa (web cookie'si) sadece o oturum kapanır; bilinmiyorsa
+  // (mobil, token gövdede gelmez) kullanıcının tüm aktif oturumları kapatılır.
+  async logout(userId: string, refreshToken?: string): Promise<void> {
+    if (refreshToken) {
+      try {
+        const payload = this.tokens.verifyRefreshToken(refreshToken);
+        if (payload.sub === userId && payload.fam) {
+          await this.revokeFamily(payload.fam);
+          return;
+        }
+      } catch {
+        // Geçersiz/süresi dolmuş token: aşağıda kullanıcının tüm oturumları kapatılır.
+      }
+    }
+    await this.revokeAllForUser(userId);
   }
 
   async me(userId: string): Promise<PublicUser> {
@@ -145,6 +191,8 @@ export class AuthService {
       where: { id: token.userId },
       data: { passwordHash, isEmailVerified: true },
     });
+    // Şifre sıfırlandığında mevcut tüm oturumlar (olası bir ele geçiren dahil) kapatılır.
+    await this.revokeAllForUser(token.userId);
   }
 
   async sendVerificationEmail(userId: string): Promise<void> {
@@ -193,10 +241,37 @@ export class AuthService {
     return token;
   }
 
-  private buildAuthResponse(user: User): AuthResponse {
+  private async buildAuthResponse(user: User): Promise<AuthResponse> {
     return {
       user: toPublicUser(user),
-      tokens: this.tokens.issuePair(user.id, user.role),
+      tokens: await this.issueSession(user, randomUUID()),
     };
+  }
+
+  private async issueSession(user: User, familyId: string): Promise<AuthTokens> {
+    const session = this.tokens.issueSession(user.id, user.role, familyId);
+    await this.prisma.refreshToken.create({
+      data: {
+        id: session.refreshTokenId,
+        userId: user.id,
+        familyId,
+        expiresAt: session.refreshExpiresAt,
+      },
+    });
+    return session.tokens;
+  }
+
+  private async revokeFamily(familyId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async revokeAllForUser(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 }
