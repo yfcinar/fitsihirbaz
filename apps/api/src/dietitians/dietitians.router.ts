@@ -8,11 +8,13 @@ import {
   DietitianPublicSummarySchema,
   DietitianSearchInputSchema,
   DietitianSearchResultSchema,
+  RecommendedDietitiansInputSchema,
+  RecommendedDietitiansResultSchema,
   RemoveCertificationInputSchema,
   UpdateDietitianProfileInputSchema,
 } from "@fit-sihirbaz/shared";
 import { z } from "zod";
-import { adminProcedure, dietitianProcedure, publicProcedure, router } from "../trpc/trpc";
+import { adminProcedure, clientProcedure, dietitianProcedure, publicProcedure, router } from "../trpc/trpc";
 import type { DietitiansService } from "./dietitians.service";
 import { DietitianProfileNotFoundError } from "./dietitians.errors";
 
@@ -43,6 +45,12 @@ export function createDietitiansRouter(service: DietitiansService) {
           mapProfileNotFound(error);
         }
       }),
+
+    // Danışana özel, puan dökümlü ve gerekçeli öneriler (sıralama algoritması: ranking.ts).
+    recommended: clientProcedure
+      .input(RecommendedDietitiansInputSchema)
+      .output(RecommendedDietitiansResultSchema)
+      .query(({ ctx, input }) => service.recommended(ctx.user.id, input.limit)),
 
     search: publicProcedure
       .input(DietitianSearchInputSchema)

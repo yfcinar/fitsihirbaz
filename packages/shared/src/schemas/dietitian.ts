@@ -75,3 +75,33 @@ export const RemoveCertificationInputSchema = z.object({
   url: z.string().min(1).max(500),
 });
 export type RemoveCertificationInput = z.infer<typeof RemoveCertificationInputSchema>;
+
+// Danışana uygunluk puanıyla önerilen diyetisyenler (şeffaf puan dökümü + gerekçeler).
+// Puan yalnızca uygunluk ve kaliteye bağlıdır; komisyon/ödeme sıralamayı etkilemez.
+export const RecommendedDietitiansInputSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(30).default(10),
+});
+export type RecommendedDietitiansInput = z.infer<typeof RecommendedDietitiansInputSchema>;
+
+export const RecommendedDietitianSchema = DietitianPublicSummarySchema.extend({
+  score: z.number().int().min(0).max(100),
+  reasons: z.array(z.string()),
+  breakdown: z.object({
+    expertise: z.number(),
+    access: z.number(),
+    budget: z.number(),
+    quality: z.number(),
+    experience: z.number(),
+  }),
+  startingPrice: z.number().nullable(),
+  sessionModes: z.array(z.enum(["ONLINE", "IN_PERSON"])),
+  reviewCount: z.number().int(),
+});
+export type RecommendedDietitian = z.infer<typeof RecommendedDietitianSchema>;
+
+export const RecommendedDietitiansResultSchema = z.object({
+  items: z.array(RecommendedDietitianSchema),
+  // false: danışan profilinde hedef/şehir/bütçe gibi bilgi yok; öneriler genel kaliteye göre.
+  personalized: z.boolean(),
+});
+export type RecommendedDietitiansResult = z.infer<typeof RecommendedDietitiansResultSchema>;

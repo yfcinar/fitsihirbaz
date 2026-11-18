@@ -597,7 +597,14 @@ async function main() {
     },
   };
   for (const [email, details] of Object.entries(demoClientDetails)) {
-    await prisma.clientProfile.updateMany({ where: { user: { email } }, data: details });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) continue;
+    // Deniz gibi profili hiç oluşturulmamış demo danışanlar için de oluşturur.
+    await prisma.clientProfile.upsert({
+      where: { userId: user.id },
+      update: details,
+      create: { userId: user.id, ...details },
+    });
   }
 
   // Demo kullanıcıların KVKK rıza kayıtları (gerçek kayıtta auth.register oluşturur).

@@ -7,6 +7,7 @@ import type {
   DietitianPublicSummary,
   DietitianSearchInput,
   DietitianSearchResult,
+  RecommendedDietitiansResult,
   UpdateDietitianProfileInput,
 } from "@fit-sihirbaz/shared";
 
@@ -14,6 +15,7 @@ const MAX_CERTIFICATION_COUNT = 10;
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { DietitianProfileNotFoundError } from "./dietitians.errors";
+import { rankDietitians, type RankingClient, type RankingDietitian } from "./ranking";
 import { toClientSummary, toDietitianProfile, toDietitianPublicSummary } from "./dietitians.mapper";
 
 @Injectable()
@@ -74,6 +76,69 @@ export class DietitiansService {
     ]);
 
     return { items: rows.map(toDietitianPublicSummary), total };
+  }
+
+  // Danışan profiline (hedef, şehir, görüşme tercihi, bütçe, sağlık notu, yaşam tarzı) göre
+  // onaylı diyetisyenleri puanlar (bkz. ranking.ts). Yalnızca VERIFIED diyetisyenler önerilir.
+  async recommended(clientUserId: string, limit: number): Promise<RecommendedDietitiansResult> {
+    // Profili henüz oluşmamış danışan hata almaz; boş profille (kişiselleştirilmemiş) değerlendirilir.
+    const profile = await this.prisma.clientProfile.findUnique({ where: { userId: clientUserId } });
+
+    const rows = await this.prisma.dietitianProfile.findMany({
+      where: { verificationStatus: "VERIFIED" },
+      include: {
+        user: true,
+        packages: { where: { isActive: true }, select: { price: true, sessionMode: true } },
+        _count: { select: { reviews: true } },
+      },
+    });
+
+    const client: RankingClient = {
+      goal: profile?.goal ?? null,
+      city: profile?.city ?? null,
+      preferredSessionMode: profile?.preferredSessionMode ?? null,
+      maxBudgetTry: profile?.maxBudgetTry ?? null,
+      medicalNotes: profile?.medicalNotes ?? null,
+      sports: profile?.sports ?? [],
+      dietaryPreferences: profile?.dietaryPreferences ?? [],
+      allergies: profile?.allergies ?? [],
+    };
+    const candidates: RankingDietitian[] = rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      bio: row.bio,
+      specialties: row.specialties,
+      city: row.city,
+      averageRating: row.averageRating === null ? null : Number(row.averageRating),
+      reviewCount: row._count.reviews,
+      yearsOfExperience: row.yearsOfExperience,
+      packages: row.packages.map((pkg) => ({ price: Number(pkg.price), sessionMode: pkg.sessionMode })),
+    }));
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const items = rankDietitians(client, candidates)
+      .slice(0, limit)
+      .map((scored) => ({
+        ...toDietitianPublicSummary(byId.get(scored.dietitianId)!),
+        score: scored.score,
+        reasons: scored.reasons,
+        breakdown: scored.breakdown,
+        startingPrice: scored.startingPrice,
+        sessionModes: scored.sessionModes,
+        reviewCount: candidates.find((candidate) => candidate.id === scored.dietitianId)!.reviewCount,
+      }));
+
+    const personalized = Boolean(
+      client.goal ||
+        client.city ||
+        client.preferredSessionMode ||
+        client.maxBudgetTry !== null ||
+        client.medicalNotes ||
+        client.sports.length > 0 ||
+        client.dietaryPreferences.length > 0 ||
+        client.allergies.length > 0,
+    );
+    return { items, personalized };
   }
 
   async getPublicProfile(dietitianProfileId: string): Promise<DietitianPublicSummary> {

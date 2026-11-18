@@ -35,6 +35,7 @@ function buildDietitianRow(overrides: Partial<Record<string, unknown>> = {}) {
 describe("DietitiansService", () => {
   let prisma: {
     dietitianProfile: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+    clientProfile: { findUnique: jest.Mock };
     clientDietitianLink: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -49,11 +50,95 @@ describe("DietitiansService", () => {
         findMany: jest.fn(),
         count: jest.fn(),
       },
+      clientProfile: { findUnique: jest.fn() },
       clientDietitianLink: { findMany: jest.fn() },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
     notifications = { create: jest.fn() };
     service = new DietitiansService(prisma as unknown as PrismaService, notifications as unknown as NotificationsService);
+  });
+
+  describe("recommended", () => {
+    function recRow(id: string, overrides: Record<string, unknown> = {}) {
+      return {
+        ...buildDietitianRow({ id, userId: "u-" + id, verificationStatus: "VERIFIED", city: null }),
+        packages: [{ price: "1500", sessionMode: "BOTH" }],
+        _count: { reviews: 0 },
+        ...overrides,
+      };
+    }
+
+    function clientRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "client-1",
+        goal: null,
+        city: null,
+        preferredSessionMode: null,
+        maxBudgetTry: null,
+        medicalNotes: null,
+        sports: [],
+        dietaryPreferences: [],
+        allergies: [],
+        ...overrides,
+      };
+    }
+
+    it("danışan profili henüz yoksa hata vermez, kişiselleştirilmemiş sıralama döner", async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(null);
+      prisma.dietitianProfile.findMany.mockResolvedValue([recRow("a")]);
+
+      const result = await service.recommended("client-user", 10);
+
+      expect(result.personalized).toBe(false);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it("yalnızca onaylı (VERIFIED) diyetisyenleri sorgular", async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(clientRow());
+      prisma.dietitianProfile.findMany.mockResolvedValue([]);
+
+      await service.recommended("client-user", 10);
+
+      expect(prisma.dietitianProfile.findMany.mock.calls[0][0].where).toEqual({ verificationStatus: "VERIFIED" });
+    });
+
+    it("danışanın hedefine uygun diyetisyeni öne çıkarır ve gerekçe/puan döner", async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(clientRow({ goal: "WEIGHT_LOSS" }));
+      prisma.dietitianProfile.findMany.mockResolvedValue([
+        recRow("spor", { specialties: ["Spor Beslenmesi"], bio: null, title: null }),
+        recRow("kilo", { specialties: ["Kilo Yönetimi"], bio: null, title: null }),
+      ]);
+
+      const result = await service.recommended("client-user", 10);
+
+      expect(result.items.map((item) => item.id)).toEqual(["kilo", "spor"]);
+      expect(result.items[0].score).toBeGreaterThan(result.items[1].score);
+      expect(result.items[0].reasons.join(" ")).toContain("kilo verme");
+      expect(result.personalized).toBe(true);
+    });
+
+    it("danışan bilgisi yoksa personalized=false döner", async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(clientRow());
+      prisma.dietitianProfile.findMany.mockResolvedValue([recRow("a")]);
+
+      const result = await service.recommended("client-user", 10);
+
+      expect(result.personalized).toBe(false);
+    });
+
+    it("limit kadar sonuç döner ve yorum sayısını iletir", async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(clientRow());
+      prisma.dietitianProfile.findMany.mockResolvedValue([
+        recRow("a", { _count: { reviews: 12 }, averageRating: "4.8" }),
+        recRow("b"),
+        recRow("c"),
+      ]);
+
+      const result = await service.recommended("client-user", 2);
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items.find((item) => item.id === "a")?.reviewCount).toBe(12);
+    });
   });
 
   describe("getMyProfile", () => {
