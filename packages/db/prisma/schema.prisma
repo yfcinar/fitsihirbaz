@@ -186,6 +186,7 @@ model DietitianProfile {
   reviews       Review[]
   orders        Order[]
   conversations Conversation[]
+  dayComments   DayComment[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -212,6 +213,10 @@ model ClientProfile {
   reviews       Review[]
   appointments  Appointment[]
   conversations Conversation[]
+  mealItemLogs  MealItemLog[]
+  foodLogEntries FoodLogEntry[]
+  waterLogs     WaterLog[]
+  dayComments   DayComment[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -274,6 +279,7 @@ model FoodItem {
   nutrientData        NutrientData?
   recipeIngredients   RecipeIngredient[]
   dietPlanMealItems   DietPlanMealItem[]
+  foodLogEntries      FoodLogEntry[]
 
   @@index([name])
   @@index([category])
@@ -421,6 +427,7 @@ model DietPlanMealItem {
   dietPlanMeal  DietPlanMeal @relation(fields: [dietPlanMealId], references: [id], onDelete: Cascade)
   foodItem      FoodItem?    @relation(fields: [foodItemId], references: [id])
   recipe        Recipe?      @relation(fields: [recipeId], references: [id])
+  logs          MealItemLog[]
 
   @@index([dietPlanMealId])
 }
@@ -722,4 +729,83 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Danışan günlük takibi (diyetisyen tarafından izlenir)
+// ─────────────────────────────────────────────────────────────
+
+enum MealLogStatus {
+  EATEN
+  PARTIAL
+  SKIPPED
+}
+
+// Danışanın diyet planındaki bir kalemi belirli bir günde "yedim / kısmen / yemedim"
+// olarak işaretlemesi. logDate, planın başlangıç tarihi + gün numarasından sunucuda hesaplanır.
+model MealItemLog {
+  id                 String        @id @default(uuid())
+  clientId           String
+  dietPlanMealItemId String
+  logDate            DateTime      @db.Date
+  status             MealLogStatus
+  note               String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  client   ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  mealItem DietPlanMealItem @relation(fields: [dietPlanMealItemId], references: [id], onDelete: Cascade)
+
+  @@unique([dietPlanMealItemId, logDate])
+  @@index([clientId, logDate])
+}
+
+// Plan dışında yenen besin. Besin değerleri kayıt anında anlık görüntü olarak saklanır; besin
+// veritabanı sonradan değişse de danışanın geçmiş günlüğü değişmez.
+model FoodLogEntry {
+  id         String          @id @default(uuid())
+  clientId   String
+  logDate    DateTime        @db.Date
+  mealType   MealType
+  foodItemId String?
+  customName String?
+  quantity   Decimal
+  unit       MeasurementUnit
+  calories   Decimal
+  protein    Decimal
+  carbs      Decimal
+  fat        Decimal
+  createdAt  DateTime        @default(now())
+
+  client   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  foodItem FoodItem?     @relation(fields: [foodItemId], references: [id])
+
+  @@index([clientId, logDate])
+}
+
+model WaterLog {
+  id        String   @id @default(uuid())
+  clientId  String
+  logDate   DateTime @db.Date
+  amountMl  Int
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, logDate])
+}
+
+// Diyetisyenin danışanın belirli bir günü için bıraktığı yorum/geri bildirim.
+model DayComment {
+  id          String   @id @default(uuid())
+  clientId    String
+  dietitianId String
+  logDate     DateTime @db.Date
+  body        String
+  createdAt   DateTime @default(now())
+
+  client    ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, logDate])
 }

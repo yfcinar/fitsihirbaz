@@ -25,6 +25,8 @@ import { createReviewsRouter } from "../reviews/reviews.router";
 import type { ReviewsService } from "../reviews/reviews.service";
 import { createProgressRouter } from "../progress/progress.router";
 import type { ProgressService } from "../progress/progress.service";
+import { createTrackingRouter } from "../tracking/tracking.router";
+import type { TrackingService } from "../tracking/tracking.service";
 import { createAppointmentsRouter } from "../appointments/appointments.router";
 import type { AppointmentsService } from "../appointments/appointments.service";
 import { createMessagesRouter } from "../messages/messages.router";
@@ -54,6 +56,7 @@ interface AppRouterDeps {
   paymentsService: PaymentsService;
   reviewsService: ReviewsService;
   progressService: ProgressService;
+  trackingService: TrackingService;
   appointmentsService: AppointmentsService;
   messagesService: MessagesService;
   articlesService: ArticlesService;
@@ -77,6 +80,7 @@ export function createAppRouter(deps: AppRouterDeps) {
     payments: createPaymentsRouter(deps.paymentsService, { allowMockPayments: deps.allowMockPayments }),
     reviews: createReviewsRouter(deps.reviewsService),
     progress: createProgressRouter(deps.progressService),
+    tracking: createTrackingRouter(deps.trackingService),
     appointments: createAppointmentsRouter(deps.appointmentsService),
     messages: createMessagesRouter(deps.messagesService),
     articles: createArticlesRouter(deps.articlesService),

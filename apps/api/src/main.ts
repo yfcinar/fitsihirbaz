@@ -23,6 +23,7 @@ import { OrdersService } from "./orders/orders.service";
 import { PaymentsService } from "./payments/payments.service";
 import { ReviewsService } from "./reviews/reviews.service";
 import { ProgressService } from "./progress/progress.service";
+import { TrackingService } from "./tracking/tracking.service";
 import { AppointmentsService } from "./appointments/appointments.service";
 import { MessagesService } from "./messages/messages.service";
 import { ArticlesService } from "./articles/articles.service";
@@ -67,6 +68,7 @@ async function bootstrap() {
     paymentsService: app.get(PaymentsService),
     reviewsService: app.get(ReviewsService),
     progressService: app.get(ProgressService),
+    trackingService: app.get(TrackingService),
     appointmentsService: app.get(AppointmentsService),
     messagesService: app.get(MessagesService),
     articlesService: app.get(ArticlesService),
