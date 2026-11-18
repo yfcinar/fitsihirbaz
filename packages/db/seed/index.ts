@@ -4,6 +4,16 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Bu seed herkese açık demo hesaplar (Demo1234) ve bilinen bir admin şifresi oluşturur;
+  // production'da yanlışlıkla çalışırsa bu hesaplar canlıya sızar. Bilinçli olarak
+  // SEED_DEMO=true verilmedikçe production'da çalışmayı reddeder. Gerçek bir admin için
+  // `pnpm db:create-admin` kullanılır.
+  if (process.env.NODE_ENV === "production" && process.env.SEED_DEMO !== "true") {
+    // eslint-disable-next-line no-console
+    console.log("Seed atlandı: production ortamında demo veri için SEED_DEMO=true gerekir.");
+    return;
+  }
+
   const usdaSource = await prisma.foodSource.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: {},
