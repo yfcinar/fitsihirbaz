@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { optionalCoerced } from "./common";
+import { SessionModeSchema } from "./package";
+
+// Serbest listeler (hobi, spor, alerji...): boşluk kırpılır, en fazla 20 madde, her biri en fazla 60 karakter.
+export const profileListSchema = z.array(z.string().trim().min(1).max(60)).max(20);
 
 export const GenderSchema = z.enum(["MALE", "FEMALE", "OTHER"]);
 export type Gender = z.infer<typeof GenderSchema>;
@@ -24,6 +28,16 @@ export const ClientProfileSchema = z.object({
   goal: GoalSchema.nullable(),
   activityLevel: ActivityLevelSchema.nullable(),
   medicalNotes: z.string().nullable(),
+  occupation: z.string().nullable(),
+  hobbies: z.array(z.string()),
+  sports: z.array(z.string()),
+  dietaryPreferences: z.array(z.string()),
+  allergies: z.array(z.string()),
+  currentWeightKg: z.number().nullable(),
+  targetWeightKg: z.number().nullable(),
+  city: z.string().nullable(),
+  preferredSessionMode: SessionModeSchema.nullable(),
+  maxBudgetTry: z.number().int().nullable(),
 });
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 
@@ -34,6 +48,16 @@ export const UpdateClientProfileInputSchema = z.object({
   goal: optionalCoerced(GoalSchema),
   activityLevel: optionalCoerced(ActivityLevelSchema),
   medicalNotes: z.string().max(5000).optional(),
+  occupation: optionalCoerced(z.string().trim().min(1).max(100)),
+  hobbies: profileListSchema.optional(),
+  sports: profileListSchema.optional(),
+  dietaryPreferences: profileListSchema.optional(),
+  allergies: profileListSchema.optional(),
+  currentWeightKg: optionalCoerced(z.coerce.number().positive().max(500)),
+  targetWeightKg: optionalCoerced(z.coerce.number().positive().max(500)),
+  city: optionalCoerced(z.string().trim().min(1).max(80)),
+  preferredSessionMode: optionalCoerced(SessionModeSchema),
+  maxBudgetTry: optionalCoerced(z.coerce.number().int().positive().max(1_000_000)),
 });
 export type UpdateClientProfileInput = z.infer<typeof UpdateClientProfileInputSchema>;
 

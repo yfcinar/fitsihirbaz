@@ -15,6 +15,7 @@ export function toDietitianPublicSummary(row: DietitianProfileWithUser): Dietiti
     specialties: row.specialties,
     yearsOfExperience: row.yearsOfExperience,
     averageRating: row.averageRating === null ? null : Number(row.averageRating),
+    city: row.city,
     verificationStatus: row.verificationStatus,
   };
 }

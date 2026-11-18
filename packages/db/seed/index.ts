@@ -4,6 +4,16 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Bu seed herkese açık demo hesaplar (Demo1234) ve bilinen bir admin şifresi oluşturur;
+  // production'da yanlışlıkla çalışırsa bu hesaplar canlıya sızar. Bilinçli olarak
+  // SEED_DEMO=true verilmedikçe production'da çalışmayı reddeder. Gerçek bir admin için
+  // `pnpm db:create-admin` kullanılır.
+  if (process.env.NODE_ENV === "production" && process.env.SEED_DEMO !== "true") {
+    // eslint-disable-next-line no-console
+    console.log("Seed atlandı: production ortamında demo veri için SEED_DEMO=true gerekir.");
+    return;
+  }
+
   const usdaSource = await prisma.foodSource.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: {},
@@ -543,6 +553,178 @@ async function main() {
   await seedReferenceIntake({ nutrient: "FAT", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "ALL", value: 70 });
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "MALE", value: 38 });
   await seedReferenceIntake({ nutrient: "FIBER", unit: "g", ageMinYears: 19, ageMaxYears: null, sex: "FEMALE", value: 25 });
+
+  // Demo profil detayları: diyetisyen sıralama (eşleştirme) algoritmasını gerçekçi veriyle denemek için.
+  const demoCities: Record<string, string> = {
+    "ayse.yilmaz@fitsihirbaz.com": "İzmir",
+    "mehmet.demir@fitsihirbaz.com": "İstanbul",
+    "zeynep.kaya@fitsihirbaz.com": "Ankara",
+  };
+  for (const [email, city] of Object.entries(demoCities)) {
+    await prisma.dietitianProfile.updateMany({ where: { user: { email } }, data: { city } });
+  }
+  const demoClientDetails: Record<string, object> = {
+    "elif.sahin@example.com": {
+      occupation: "Öğretmen",
+      hobbies: ["Kitap okumak", "Yürüyüş"],
+      sports: ["Pilates"],
+      dietaryPreferences: [],
+      allergies: [],
+      currentWeightKg: 78,
+      targetWeightKg: 68,
+      city: "İzmir",
+      maxBudgetTry: 3000,
+    },
+    "can.ozturk@example.com": {
+      occupation: "Yazılım geliştirici",
+      hobbies: ["Oyun", "Fotoğrafçılık"],
+      sports: ["Fitness", "Koşu"],
+      currentWeightKg: 74,
+      targetWeightKg: 80,
+      city: "İstanbul",
+      preferredSessionMode: "ONLINE",
+    },
+    "deniz.aydin@example.com": {
+      occupation: "Avukat",
+      hobbies: ["Seyahat"],
+      sports: ["Yüzme"],
+      dietaryPreferences: ["Vejetaryen"],
+      allergies: ["Fıstık"],
+      currentWeightKg: 66,
+      targetWeightKg: 60,
+      city: "İstanbul",
+      maxBudgetTry: 1500,
+    },
+  };
+  for (const [email, details] of Object.entries(demoClientDetails)) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) continue;
+    // Deniz gibi profili hiç oluşturulmamış demo danışanlar için de oluşturur.
+    await prisma.clientProfile.upsert({
+      where: { userId: user.id },
+      update: details,
+      create: { userId: user.id, ...details },
+    });
+  }
+
+  // Demo kullanıcıların KVKK rıza kayıtları (gerçek kayıtta auth.register oluşturur).
+  const usersWithoutConsent = await prisma.user.findMany({
+    where: { role: { in: ["CLIENT", "DIETITIAN"] }, consents: { none: {} } },
+    select: { id: true, role: true },
+  });
+  for (const user of usersWithoutConsent) {
+    await prisma.consentRecord.createMany({
+      data: [
+        { userId: user.id, type: "PRIVACY_NOTICE", version: "2026-11-taslak" },
+        { userId: user.id, type: "TERMS_OF_SERVICE", version: "2026-11-taslak" },
+        ...(user.role === "CLIENT" ? [{ userId: user.id, type: "HEALTH_DATA_EXPLICIT" as const, version: "2026-11-taslak" }] : []),
+      ],
+    });
+  }
+
+  // Demo: Elif'in 12 haftalık kilo geçmişi ve Ayşe'nin vitrininde anonim paylaşım izni (değişim vitrini).
+  const elifLogCount = await prisma.progressLog.count({ where: { clientId: elif.id } });
+  if (elifLogCount === 0) {
+    const weights = [84.0, 82.5, 81.2, 80.0, 78.9, 78.0];
+    const dayMs = 86_400_000;
+    const todayStart = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    for (let i = 0; i < weights.length; i++) {
+      await prisma.progressLog.create({
+        data: { clientId: elif.id, logDate: new Date(todayStart.getTime() - (84 - i * 16) * dayMs), weightKg: weights[i] },
+      });
+    }
+  }
+  await prisma.showcaseConsent.upsert({
+    where: { clientId_dietitianId: { clientId: elif.id, dietitianId: ayse.id } },
+    update: {},
+    create: { clientId: elif.id, dietitianId: ayse.id, anonymous: true, includePhotos: false },
+  });
+
+  // Demo: Ayşe'nin Elif için yazdığı aktif 7 günlük plan + Elif'in ilk günlerdeki takip kayıtları.
+  // Diyetisyen takip görünümünü ve danışan günlüğünü boş ekranla değil dolu veriyle görmek için.
+  const demoPlanTitle = "Demo: 7 Günlük Kilo Verme Planı";
+  const existingDemoPlan = await prisma.dietPlan.findFirst({ where: { clientId: elif.id, title: demoPlanTitle } });
+  if (!existingDemoPlan) {
+    const todayUtc = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const planStart = new Date(todayUtc.getTime() - 3 * 86_400_000);
+    const foodByName = async (name: string) => {
+      const food = await prisma.foodItem.findFirst({ where: { name } });
+      if (!food) {
+        throw new Error(`Demo plan için besin bulunamadı: ${name}`);
+      }
+      return food;
+    };
+    const mealTemplate: Array<{ mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK"; items: Array<[string, number]> }> = [
+      { mealType: "BREAKFAST", items: [["Yulaf Ezmesi", 50], ["Yumurta", 100]] },
+      { mealType: "LUNCH", items: [["Tavuk Göğsü (haşlanmış)", 120], ["Kırmızı Mercimek (pişmiş)", 150]] },
+      { mealType: "SNACK", items: [["Elma", 150], ["Badem", 20]] },
+      { mealType: "DINNER", items: [["Yoğurt (yağsız)", 200], ["Zeytinyağı", 10]] },
+    ];
+    const plan = await prisma.dietPlan.create({
+      data: {
+        clientId: elif.id,
+        dietitianId: ayse.id,
+        title: demoPlanTitle,
+        startDate: planStart,
+        endDate: new Date(planStart.getTime() + 6 * 86_400_000),
+        targetCalories: 1600,
+        status: "ACTIVE",
+      },
+    });
+    for (let dayNumber = 1; dayNumber <= 7; dayNumber++) {
+      const day = await prisma.dietPlanDay.create({ data: { dietPlanId: plan.id, dayNumber } });
+      for (const template of mealTemplate) {
+        const meal = await prisma.dietPlanMeal.create({ data: { dietPlanDayId: day.id, mealType: template.mealType } });
+        for (const [foodName, grams] of template.items) {
+          const food = await foodByName(foodName);
+          const item = await prisma.dietPlanMealItem.create({
+            data: { dietPlanMealId: meal.id, foodItemId: food.id, quantity: grams, unit: "GRAM" },
+          });
+          if (dayNumber <= 3) {
+            // 1. ve 2. gün büyük ölçüde uyulmuş, 3. gün (dün) kısmen atlanmış gibi.
+            const status = dayNumber === 3 && template.mealType === "DINNER" ? "SKIPPED" : dayNumber === 3 && template.mealType === "SNACK" ? "PARTIAL" : "EATEN";
+            await prisma.mealItemLog.create({
+              data: {
+                clientId: elif.id,
+                dietPlanMealItemId: item.id,
+                logDate: new Date(planStart.getTime() + (dayNumber - 1) * 86_400_000),
+                status,
+              },
+            });
+          }
+        }
+      }
+    }
+    await prisma.waterLog.createMany({
+      data: [
+        { clientId: elif.id, logDate: planStart, amountMl: 500 },
+        { clientId: elif.id, logDate: planStart, amountMl: 750 },
+        { clientId: elif.id, logDate: new Date(planStart.getTime() + 86_400_000), amountMl: 1500 },
+      ],
+    });
+    await prisma.foodLogEntry.create({
+      data: {
+        clientId: elif.id,
+        logDate: new Date(planStart.getTime() + 86_400_000),
+        mealType: "SNACK",
+        customName: "Simit",
+        quantity: 1,
+        unit: "PIECE",
+        calories: 290,
+        protein: 9,
+        carbs: 55,
+        fat: 5,
+      },
+    });
+    await prisma.dayComment.create({
+      data: {
+        clientId: elif.id,
+        dietitianId: ayse.id,
+        logDate: planStart,
+        body: "İlk günü harika tamamlamışsın, su tüketimini de artırmaya devam et!",
+      },
+    });
+  }
 
   console.log(
     `Seed tamamlandı: 1 FoodSource, ${sampleFoods.length} FoodItem, 1 admin, 3 diyetisyen, 3 danışan, 3 paket, 2 ödenmiş sipariş, 2 yorum, 1 randevu, 7 referans alım değeri (yer tutucu).`,

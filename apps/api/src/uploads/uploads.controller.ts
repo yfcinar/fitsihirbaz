@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   BadRequestException,
   Controller,
   Post,
   Req,
   UnauthorizedException,
+  UseGuards,
   UseInterceptors,
   UploadedFile,
 } from "@nestjs/common";
@@ -15,9 +16,10 @@ import { diskStorage } from "multer";
 import type { Request } from "express";
 import { TokenService } from "../auth/token.service";
 import { resolveAuthedUser } from "../auth/resolve-authed-user";
+import { EXTENSION_BY_MIME, isAllowedImageMime } from "./image-signature";
+import { ImageContentInterceptor, UploadsAuthGuard } from "./uploads.guards";
 
 const UPLOAD_BASE = resolve(__dirname, "../../uploads");
-const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 const UPLOAD_FOLDERS = new Set(["avatars", "posts", "progress", "certifications", "foods"]);
@@ -49,6 +51,7 @@ export class UploadsController {
   constructor(private readonly tokenService: TokenService) {}
 
   @Post("image")
+  @UseGuards(UploadsAuthGuard)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
@@ -58,14 +61,17 @@ export class UploadsController {
           callback(null, dir);
         },
         filename: (_req, file, callback) => {
-          callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`);
+          // Uzantı kullanıcının verdiği dosya adından değil, izin verilen türden gelir.
+          const extension = isAllowedImageMime(file.mimetype) ? EXTENSION_BY_MIME[file.mimetype] : "";
+          callback(null, `${randomUUID()}${extension}`);
         },
       }),
       limits: { fileSize: MAX_FILE_SIZE_BYTES },
       fileFilter: (_req, file, callback) => {
-        callback(null, ALLOWED_MIME_TYPES.has(file.mimetype));
+        callback(null, isAllowedImageMime(file.mimetype));
       },
     }),
+    ImageContentInterceptor,
   )
   uploadImage(@Req() req: Request, @UploadedFile() file?: Express.Multer.File): { url: string } {
     const user = resolveAuthedUser(req, this.tokenService);

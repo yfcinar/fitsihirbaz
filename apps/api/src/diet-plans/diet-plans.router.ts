@@ -12,6 +12,7 @@ import {
   DietPlanSummarySchema,
   DuplicateForNewCalorieTargetInputSchema,
   ListDietPlansInputSchema,
+  SendDietPlanInputSchema,
 } from "@fit-sihirbaz/shared";
 import { dietitianProcedure, protectedProcedure, router } from "../trpc/trpc";
 import type { DietPlansService } from "./diet-plans.service";
@@ -20,7 +21,9 @@ import {
   DietPlanAccessDeniedError,
   DietPlanDayNotFoundError,
   DietPlanFoodItemNotFoundError,
+  DietPlanHasNoItemsError,
   DietPlanMealNotFoundError,
+  DietPlanNotDraftError,
   DietPlanNotFoundError,
   DietPlanRecipeNotFoundError,
   DietitianProfileNotFoundError,
@@ -58,6 +61,12 @@ function mapDietPlanError(error: unknown): never {
   }
   if (error instanceof MissingClientIdError) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "clientId zorunlu" });
+  }
+  if (error instanceof DietPlanNotDraftError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Bu plan zaten gönderilmiş" });
+  }
+  if (error instanceof DietPlanHasNoItemsError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Plana en az bir besin eklemeden gönderemezsiniz" });
   }
   throw error;
 }
@@ -125,6 +134,17 @@ export function createDietPlansRouter(service: DietPlansService) {
       .query(async ({ ctx, input }) => {
         try {
           return await service.getById(ctx.user.id, ctx.user.role, input.id);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    send: dietitianProcedure
+      .input(SendDietPlanInputSchema)
+      .output(DietPlanSummarySchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.send(ctx.user.id, input.dietPlanId);
         } catch (error) {
           mapDietPlanError(error);
         }

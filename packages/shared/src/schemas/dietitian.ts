@@ -15,6 +15,7 @@ export const DietitianPublicSummarySchema = z.object({
   specialties: z.array(z.string()),
   yearsOfExperience: z.number().int().nullable(),
   averageRating: z.number().nullable(),
+  city: z.string().nullable(),
   verificationStatus: VerificationStatusSchema,
 });
 export type DietitianPublicSummary = z.infer<typeof DietitianPublicSummarySchema>;
@@ -49,6 +50,7 @@ export const UpdateDietitianProfileInputSchema = z.object({
   specialties: z.array(z.string().min(1).max(50)).max(20).optional(),
   yearsOfExperience: optionalCoerced(z.coerce.number().int().min(0).max(70)),
   licenseNumber: optionalCoerced(z.string().min(1).max(50)),
+  city: optionalCoerced(z.string().trim().min(1).max(80)),
 });
 export type UpdateDietitianProfileInput = z.infer<typeof UpdateDietitianProfileInputSchema>;
 
@@ -73,3 +75,33 @@ export const RemoveCertificationInputSchema = z.object({
   url: z.string().min(1).max(500),
 });
 export type RemoveCertificationInput = z.infer<typeof RemoveCertificationInputSchema>;
+
+// Danışana uygunluk puanıyla önerilen diyetisyenler (şeffaf puan dökümü + gerekçeler).
+// Puan yalnızca uygunluk ve kaliteye bağlıdır; komisyon/ödeme sıralamayı etkilemez.
+export const RecommendedDietitiansInputSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(30).default(10),
+});
+export type RecommendedDietitiansInput = z.infer<typeof RecommendedDietitiansInputSchema>;
+
+export const RecommendedDietitianSchema = DietitianPublicSummarySchema.extend({
+  score: z.number().int().min(0).max(100),
+  reasons: z.array(z.string()),
+  breakdown: z.object({
+    expertise: z.number(),
+    access: z.number(),
+    budget: z.number(),
+    quality: z.number(),
+    experience: z.number(),
+  }),
+  startingPrice: z.number().nullable(),
+  sessionModes: z.array(z.enum(["ONLINE", "IN_PERSON"])),
+  reviewCount: z.number().int(),
+});
+export type RecommendedDietitian = z.infer<typeof RecommendedDietitianSchema>;
+
+export const RecommendedDietitiansResultSchema = z.object({
+  items: z.array(RecommendedDietitianSchema),
+  // false: danışan profilinde hedef/şehir/bütçe gibi bilgi yok; öneriler genel kaliteye göre.
+  personalized: z.boolean(),
+});
+export type RecommendedDietitiansResult = z.infer<typeof RecommendedDietitiansResultSchema>;

@@ -109,7 +109,10 @@ export function createAuthRouter(authService: AuthService, rateLimiter: RateLimi
         }
       }),
 
-    logout: protectedProcedure.mutation(({ ctx }) => {
+    logout: protectedProcedure.mutation(async ({ ctx }) => {
+      // Cookie'deki refresh token biliniyorsa sadece o oturum, bilinmiyorsa (mobil) kullanıcının
+      // tüm oturumları sunucu tarafında iptal edilir.
+      await authService.logout(ctx.user.id, ctx.req.cookies?.[REFRESH_COOKIE_NAME]);
       clearRefreshCookie(ctx.res);
       return { success: true };
     }),

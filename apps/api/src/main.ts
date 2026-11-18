@@ -23,6 +23,8 @@ import { OrdersService } from "./orders/orders.service";
 import { PaymentsService } from "./payments/payments.service";
 import { ReviewsService } from "./reviews/reviews.service";
 import { ProgressService } from "./progress/progress.service";
+import { TrackingService } from "./tracking/tracking.service";
+import { ShowcaseService } from "./showcase/showcase.service";
 import { AppointmentsService } from "./appointments/appointments.service";
 import { MessagesService } from "./messages/messages.service";
 import { ArticlesService } from "./articles/articles.service";
@@ -34,7 +36,7 @@ import { createContextFactory } from "./trpc/context";
 import type { Env } from "./config/env.validation";
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
   app.use(cookieParser());
@@ -67,12 +69,15 @@ async function bootstrap() {
     paymentsService: app.get(PaymentsService),
     reviewsService: app.get(ReviewsService),
     progressService: app.get(ProgressService),
+    trackingService: app.get(TrackingService),
+    showcaseService: app.get(ShowcaseService),
     appointmentsService: app.get(AppointmentsService),
     messagesService: app.get(MessagesService),
     articlesService: app.get(ArticlesService),
     notificationsService: app.get(NotificationsService),
     referenceIntakesService: app.get(ReferenceIntakesService),
     postsService: app.get(PostsService),
+    allowMockPayments: config.get("ALLOW_MOCK_PAYMENTS", { infer: true }),
   });
   app.use(
     "/trpc",

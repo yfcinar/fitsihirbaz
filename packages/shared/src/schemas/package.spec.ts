@@ -51,3 +51,19 @@ describe("BrowsePackagesInputSchema", () => {
     }
   });
 });
+
+describe("sessionMode", () => {
+  it("CreatePackageInputSchema sessionMode verilmezse BOTH varsayar", () => {
+    const result = CreatePackageInputSchema.safeParse({ title: "Paket", durationDays: 30, price: 500 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionMode).toBe("BOTH");
+    }
+  });
+
+  it("geçersiz sessionMode değerini reddeder", () => {
+    expect(
+      CreatePackageInputSchema.safeParse({ title: "Paket", durationDays: 30, price: 500, sessionMode: "PHONE" }).success,
+    ).toBe(false);
+  });
+});

@@ -1,9 +1,12 @@
 import { DietPlansService } from "./diet-plans.service";
 import { PrismaService } from "../prisma/prisma.service";
+import type { NotificationsService } from "../notifications/notifications.service";
 import {
   ClientNotLinkedError,
   DietPlanAccessDeniedError,
   DietPlanFoodItemNotFoundError,
+  DietPlanHasNoItemsError,
+  DietPlanNotDraftError,
   DietPlanNotFoundError,
   EmptyDietPlanError,
 } from "./diet-plans.errors";
@@ -70,6 +73,7 @@ describe("DietPlansService", () => {
     recipe: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
+  let notifications: { create: jest.Mock };
   let service: DietPlansService;
 
   beforeEach(() => {
@@ -85,7 +89,8 @@ describe("DietPlansService", () => {
       recipe: { findUnique: jest.fn() },
       $transaction: jest.fn(),
     };
-    service = new DietPlansService(prisma as unknown as PrismaService);
+    notifications = { create: jest.fn().mockResolvedValue(undefined) };
+    service = new DietPlansService(prisma as unknown as PrismaService, notifications as unknown as NotificationsService);
   });
 
   describe("create", () => {
@@ -224,6 +229,31 @@ describe("DietPlansService", () => {
       );
     });
 
+    it("danışan, diyetisyenin henüz göndermediği taslak planı göremez (NotFound)", async () => {
+      prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy({ status: "DRAFT" }));
+      prisma.clientProfile.findUnique.mockResolvedValue({ id: "client-1" });
+
+      await expect(service.getById("client-user-1", "CLIENT", "plan-1")).rejects.toBeInstanceOf(
+        DietPlanNotFoundError,
+      );
+    });
+
+    it("danışan gönderilmiş (ACTIVE) kendi planını görür", async () => {
+      prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy({ status: "ACTIVE" }));
+      prisma.clientProfile.findUnique.mockResolvedValue({ id: "client-1" });
+
+      const result = await service.getById("client-user-1", "CLIENT", "plan-1");
+      expect(result.status).toBe("ACTIVE");
+    });
+
+    it("diyetisyen kendi taslak planını görmeye devam eder", async () => {
+      prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy({ status: "DRAFT" }));
+      prisma.dietitianProfile.findUnique.mockResolvedValue({ id: "dietitian-1" });
+
+      const result = await service.getById("dyt-user-1", "DIETITIAN", "plan-1");
+      expect(result.status).toBe("DRAFT");
+    });
+
     it("sahibi diyetisyen için gün/öğün/besin hiyerarşisi ve toplamları döner", async () => {
       prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy());
       prisma.dietitianProfile.findUnique.mockResolvedValue({ id: "dietitian-1" });
@@ -243,7 +273,7 @@ describe("DietPlansService", () => {
       const result = await service.list("client-user-1", "CLIENT");
       expect(result).toHaveLength(1);
       expect(prisma.dietPlan.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { clientId: "client-1" } }),
+        expect.objectContaining({ where: { clientId: "client-1", status: { in: ["ACTIVE", "COMPLETED"] } } }),
       );
     });
 
@@ -260,6 +290,76 @@ describe("DietPlansService", () => {
       expect(prisma.dietPlan.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { clientId: "client-1", dietitianId: "dietitian-1" } }),
       );
+    });
+  });
+
+  describe("send", () => {
+    function arrangeSendable(planOverrides: Record<string, unknown> = {}) {
+      prisma.dietitianProfile.findUnique.mockResolvedValue({ id: "dietitian-1" });
+      prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy(planOverrides));
+      prisma.clientDietitianLink.findFirst.mockResolvedValue({ id: "link-1" });
+      prisma.clientProfile.findUnique.mockResolvedValue({ id: "client-1", userId: "client-user-1" });
+      const tx = {
+        dietPlan: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          update: jest.fn().mockResolvedValue(buildPlanHierarchy({ status: "ACTIVE" })),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx));
+      return tx;
+    }
+
+    it("plan yoksa DietPlanNotFoundError fırlatır", async () => {
+      prisma.dietitianProfile.findUnique.mockResolvedValue({ id: "dietitian-1" });
+      prisma.dietPlan.findUnique.mockResolvedValue(null);
+      await expect(service.send("dyt-user-1", "yok")).rejects.toBeInstanceOf(DietPlanNotFoundError);
+    });
+
+    it("başka diyetisyenin planını gönderemez", async () => {
+      prisma.dietitianProfile.findUnique.mockResolvedValue({ id: "baska-diyetisyen" });
+      prisma.dietPlan.findUnique.mockResolvedValue(buildPlanHierarchy());
+      await expect(service.send("dyt-user-2", "plan-1")).rejects.toBeInstanceOf(DietPlanAccessDeniedError);
+    });
+
+    it("danışanla bağı kopmuşsa göndermeyi reddeder", async () => {
+      arrangeSendable();
+      prisma.clientDietitianLink.findFirst.mockResolvedValue(null);
+      await expect(service.send("dyt-user-1", "plan-1")).rejects.toBeInstanceOf(ClientNotLinkedError);
+    });
+
+    it("zaten gönderilmiş planı tekrar göndermez", async () => {
+      arrangeSendable({ status: "ACTIVE" });
+      await expect(service.send("dyt-user-1", "plan-1")).rejects.toBeInstanceOf(DietPlanNotDraftError);
+    });
+
+    it("hiç besin içermeyen planı göndermeyi reddeder", async () => {
+      arrangeSendable({
+        days: [{ id: "day-1", dayNumber: 1, meals: [{ id: "meal-1", mealType: "BREAKFAST", items: [] }] }],
+      });
+      await expect(service.send("dyt-user-1", "plan-1")).rejects.toBeInstanceOf(DietPlanHasNoItemsError);
+    });
+
+    it("planı ACTIVE yapar, önceki aktif planı tamamlar ve danışana bildirim gönderir", async () => {
+      const tx = arrangeSendable();
+
+      const result = await service.send("dyt-user-1", "plan-1");
+
+      expect(result.status).toBe("ACTIVE");
+      expect(tx.dietPlan.updateMany).toHaveBeenCalledWith({
+        where: { clientId: "client-1", dietitianId: "dietitian-1", status: "ACTIVE", id: { not: "plan-1" } },
+        data: { status: "COMPLETED" },
+      });
+      expect(tx.dietPlan.update).toHaveBeenCalledWith({ where: { id: "plan-1" }, data: { status: "ACTIVE" } });
+      expect(notifications.create).toHaveBeenCalledWith("client-user-1", "DIET_PLAN_SENT", {
+        dietPlanId: "plan-1",
+        title: "Test Planı",
+      });
+    });
+
+    it("bildirim hata verse de plan gönderilmiş sayılır", async () => {
+      arrangeSendable();
+      notifications.create.mockRejectedValue(new Error("push down"));
+      await expect(service.send("dyt-user-1", "plan-1")).resolves.toMatchObject({ status: "ACTIVE" });
     });
   });
 

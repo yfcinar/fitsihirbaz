@@ -1,6 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { Body, Controller, Headers, HttpCode, Post, UnauthorizedException } from "@nestjs/common";
+import {
+  Controller,
+  Headers,
+  HttpCode,
+  Post,
+  RawBodyRequest,
+  Req,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { Request } from "express";
 import { z } from "zod";
 import type { Env } from "../config/env.validation";
 import { PaymentsService } from "./payments.service";
@@ -38,16 +47,17 @@ export class PaymentsWebhookController {
   @Post()
   @HttpCode(200)
   async handleWebhook(
-    @Body() body: unknown,
+    @Req() req: RawBodyRequest<Request>,
     @Headers("x-webhook-signature") signature?: string,
   ): Promise<{ received: true }> {
     const secret = this.config.get("PAYMENT_WEBHOOK_SECRET", { infer: true });
-    const rawBody = JSON.stringify(body);
-    if (!verifySignature(rawBody, signature, secret)) {
+    // İmza, sağlayıcının gönderdiği ham gövde üzerinden doğrulanır; JSON.parse + stringify
+    // boşluk/anahtar sırasını değiştirebileceği için yeniden üretilmiş metne güvenilmez.
+    if (!req.rawBody || !verifySignature(req.rawBody.toString("utf8"), signature, secret)) {
       throw new UnauthorizedException("Geçersiz webhook imzası");
     }
 
-    const payload = WebhookPayloadSchema.parse(body);
+    const payload = WebhookPayloadSchema.parse(req.body);
     await this.paymentsService.applyProviderResult(payload.paymentId, payload.status);
     return { received: true };
   }

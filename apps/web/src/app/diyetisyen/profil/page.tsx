@@ -52,6 +52,7 @@ export default function DiyetisyenProfilPage() {
       bio: profileQuery.data.bio ?? "",
       yearsOfExperience: profileQuery.data.yearsOfExperience ?? undefined,
       licenseNumber: profileQuery.data.licenseNumber ?? "",
+      city: profileQuery.data.city ?? "",
     });
     setSpecialtiesInput(profileQuery.data.specialties.join(", "));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +139,10 @@ export default function DiyetisyenProfilPage() {
           <div className="space-y-1.5">
             <Label>Lisans No</Label>
             <Input {...dietitianForm.register("licenseNumber")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Şehir (yüz yüze görüşme için)</Label>
+            <Input placeholder="örn. İzmir" {...dietitianForm.register("city")} />
           </div>
         </div>
         {updateDietitianMutation.isSuccess && <p className="text-sm text-primary">Kaydedildi.</p>}

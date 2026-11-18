@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   AddDietPlanDayInput,
   AddDietPlanMealInput,
@@ -13,12 +13,15 @@ import type {
   Role,
 } from "@fit-sihirbaz/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import {
   ClientNotLinkedError,
   DietPlanAccessDeniedError,
   DietPlanDayNotFoundError,
   DietPlanFoodItemNotFoundError,
+  DietPlanHasNoItemsError,
   DietPlanMealNotFoundError,
+  DietPlanNotDraftError,
   DietPlanNotFoundError,
   DietPlanRecipeNotFoundError,
   DietitianProfileNotFoundError,
@@ -35,6 +38,8 @@ const MEAL_ITEM_INCLUDE = {
   foodItem: { include: { nutrientData: true } },
   recipe: { include: RECIPE_INCLUDE },
 };
+
+const CLIENT_VISIBLE_STATUSES: Array<"ACTIVE" | "COMPLETED"> = ["ACTIVE", "COMPLETED"];
 
 const PLAN_HIERARCHY_INCLUDE = {
   days: {
@@ -54,7 +59,12 @@ const PLAN_HIERARCHY_INCLUDE = {
 
 @Injectable()
 export class DietPlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(DietPlansService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(dietitianUserId: string, input: CreateDietPlanInput): Promise<DietPlanSummary> {
     const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
@@ -192,8 +202,10 @@ export class DietPlansService {
       if (!profile) {
         throw new DietPlanAccessDeniedError();
       }
+      // Danışan yalnızca kendisine gönderilmiş (ACTIVE) veya tamamlanmış planları görür;
+      // diyetisyenin henüz göndermediği taslaklar (DRAFT) danışana görünmez.
       const plans = await this.prisma.dietPlan.findMany({
-        where: { clientId: profile.id },
+        where: { clientId: profile.id, status: { in: CLIENT_VISIBLE_STATUSES } },
         orderBy: { createdAt: "desc" },
       });
       return plans.map(toDietPlanSummary);
@@ -212,6 +224,47 @@ export class DietPlansService {
     }
 
     throw new DietPlanAccessDeniedError();
+  }
+
+  // Taslak (DRAFT) planı danışana gönderir: plan ACTIVE olur, danışanın "Diyetlerim" sayfasında
+  // ve günlük takibinde görünür. Aynı diyetisyenin aynı danışana verdiği önceki aktif plan
+  // tamamlanmış (COMPLETED) sayılır; böylece takip ekranında iki aktif plan çakışmaz.
+  async send(dietitianUserId: string, dietPlanId: string): Promise<DietPlanSummary> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const plan = await this.loadPlanHierarchy(dietPlanId);
+    if (!plan) {
+      throw new DietPlanNotFoundError();
+    }
+    if (plan.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+    await this.assertClientLinked(dietitianProfile.id, plan.clientId);
+    if (plan.status !== "DRAFT") {
+      throw new DietPlanNotDraftError();
+    }
+    if (!plan.days.some((day) => day.meals.some((meal) => meal.items.length > 0))) {
+      throw new DietPlanHasNoItemsError();
+    }
+
+    const sent = await this.prisma.$transaction(async (tx) => {
+      await tx.dietPlan.updateMany({
+        where: { clientId: plan.clientId, dietitianId: dietitianProfile.id, status: "ACTIVE", id: { not: plan.id } },
+        data: { status: "COMPLETED" },
+      });
+      return tx.dietPlan.update({ where: { id: plan.id }, data: { status: "ACTIVE" } });
+    });
+
+    // Bildirim best-effort: gönderilemese de plan zaten danışana ulaşmıştır.
+    try {
+      const client = await this.prisma.clientProfile.findUnique({ where: { id: plan.clientId } });
+      if (client) {
+        await this.notifications.create(client.userId, "DIET_PLAN_SENT", { dietPlanId: plan.id, title: plan.title });
+      }
+    } catch (error) {
+      this.logger.warn(`Diyet planı bildirimi gönderilemedi (planId=${plan.id}): ${(error as Error).message}`);
+    }
+
+    return toDietPlanSummary(sent);
   }
 
   async duplicateForNewCalorieTarget(
@@ -316,7 +369,7 @@ export class DietPlansService {
   private async assertCanViewPlan(
     userId: string,
     role: Role,
-    plan: { clientId: string; dietitianId: string | null },
+    plan: { clientId: string; dietitianId: string | null; status: string },
   ) {
     if (role === "DIETITIAN") {
       const profile = await this.prisma.dietitianProfile.findUnique({ where: { userId } });
@@ -329,6 +382,10 @@ export class DietPlansService {
       const profile = await this.prisma.clientProfile.findUnique({ where: { userId } });
       if (!profile || plan.clientId !== profile.id) {
         throw new DietPlanAccessDeniedError();
+      }
+      // Gönderilmemiş taslak, danışan için "yok" gibi davranır (varlığı bile sızdırılmaz).
+      if (!(CLIENT_VISIBLE_STATUSES as string[]).includes(plan.status)) {
+        throw new DietPlanNotFoundError();
       }
       return;
     }

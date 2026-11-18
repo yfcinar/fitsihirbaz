@@ -13,10 +13,55 @@ describe("RegisterInputSchema", () => {
     role: "CLIENT" as const,
     firstName: "Ada",
     lastName: "Lovelace",
+    consents: { privacyNotice: true, termsOfService: true, healthDataExplicit: true },
   };
 
   it("geçerli bir kayıt girdisini kabul eder", () => {
     expect(RegisterInputSchema.safeParse(validInput).success).toBe(true);
+  });
+
+  describe("rızalar (KVKK)", () => {
+    it("aydınlatma metni onaylanmadan kaydı reddeder", () => {
+      const result = RegisterInputSchema.safeParse({
+        ...validInput,
+        consents: { ...validInput.consents, privacyNotice: false },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("kullanım koşulları kabul edilmeden kaydı reddeder", () => {
+      const result = RegisterInputSchema.safeParse({
+        ...validInput,
+        consents: { ...validInput.consents, termsOfService: false },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rıza bilgisi hiç gönderilmezse reddeder", () => {
+      const { consents: _omitted, ...withoutConsents } = validInput;
+      expect(RegisterInputSchema.safeParse(withoutConsents).success).toBe(false);
+    });
+
+    it("danışan için sağlık verisi açık rızası zorunludur", () => {
+      const result = RegisterInputSchema.safeParse({
+        ...validInput,
+        role: "CLIENT",
+        consents: { ...validInput.consents, healthDataExplicit: false },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path).toEqual(["consents", "healthDataExplicit"]);
+      }
+    });
+
+    it("diyetisyen için sağlık verisi açık rızası gerekmez", () => {
+      const result = RegisterInputSchema.safeParse({
+        ...validInput,
+        role: "DIETITIAN",
+        consents: { privacyNotice: true, termsOfService: true },
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   it("geçersiz e-postayı reddeder", () => {

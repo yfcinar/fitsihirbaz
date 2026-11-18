@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { SESSION_MODE_LABELS } from "@fit-sihirbaz/shared";
 import { trpc } from "@/lib/trpc";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
 import { Card } from "@/components/ui/card";
@@ -56,7 +57,7 @@ export default function SatinAlPage() {
           {pkg.dietitianTitle ? ` · ${pkg.dietitianTitle}` : ""}
         </p>
         <p className="mt-2 text-sm text-foreground/90">
-          {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""}
+          {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""} · {SESSION_MODE_LABELS[pkg.sessionMode]}
         </p>
         {pkg.description && <p className="mt-2 text-sm text-foreground/90">{pkg.description}</p>}
         <p className="mt-4 text-xl font-semibold text-foreground">

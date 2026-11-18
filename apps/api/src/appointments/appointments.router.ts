@@ -4,6 +4,8 @@ import {
   AppointmentSchema,
   CancelAppointmentInputSchema,
   CreateAppointmentInputSchema,
+  SessionBalanceInputSchema,
+  SessionBalanceSchema,
   UpdateAppointmentStatusInputSchema,
 } from "@fit-sihirbaz/shared";
 import { clientProcedure, dietitianProcedure, protectedProcedure, router } from "../trpc/trpc";
@@ -14,6 +16,9 @@ import {
   ClientNotLinkedError,
   ClientProfileNotFoundError,
   DietitianProfileNotFoundError,
+  NoSessionsRemainingError,
+  SessionModeNotAllowedError,
+  SessionPackageExpiredError,
 } from "./appointments.errors";
 
 function mapAppointmentError(error: unknown): never {
@@ -32,11 +37,31 @@ function mapAppointmentError(error: unknown): never {
   if (error instanceof DietitianProfileNotFoundError) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Diyetisyen profili bulunamadı" });
   }
+  if (error instanceof SessionModeNotAllowedError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Paketiniz bu randevu türünü (online / yüz yüze) kapsamıyor" });
+  }
+  if (error instanceof SessionPackageExpiredError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Paketinizin süresi bu randevu tarihinden önce doluyor" });
+  }
+  if (error instanceof NoSessionsRemainingError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Paketinizde kalan görüşme hakkınız yok" });
+  }
   throw error;
 }
 
 export function createAppointmentsRouter(service: AppointmentsService) {
   return router({
+    sessionBalance: clientProcedure
+      .input(SessionBalanceInputSchema)
+      .output(SessionBalanceSchema)
+      .query(async ({ ctx, input }) => {
+        try {
+          return await service.getSessionBalance(ctx.user.id, input.dietitianId);
+        } catch (error) {
+          mapAppointmentError(error);
+        }
+      }),
+
     create: clientProcedure
       .input(CreateAppointmentInputSchema)
       .output(AppointmentSchema)

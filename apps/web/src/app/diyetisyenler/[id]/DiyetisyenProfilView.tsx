@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Star } from "lucide-react";
+import { SESSION_MODE_LABELS } from "@fit-sihirbaz/shared";
+import { TransformationsSection } from "@/components/showcase/TransformationsSection";
 import { trpc } from "@/lib/trpc";
 import { useAuthStore } from "@/lib/auth-store";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
@@ -85,6 +87,8 @@ export function DiyetisyenProfilView() {
         {dietitian.bio && <p className="mt-4 whitespace-pre-line text-foreground/90">{dietitian.bio}</p>}
       </div>
 
+      <TransformationsSection dietitianId={params.id} />
+
       <h2 className="mb-3 text-lg font-semibold text-foreground">Paketler</h2>
       {packagesQuery.data && packagesQuery.data.items.length === 0 && (
         <EmptyState title="Aktif paket yok" description="Bu diyetisyenin şu anda aktif bir paketi yok." />
@@ -96,7 +100,7 @@ export function DiyetisyenProfilView() {
               <div>
                 <p className="font-medium text-foreground">{pkg.title}</p>
                 <p className="text-sm text-muted-foreground">
-                  {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""}
+                  {pkg.durationDays} gün{pkg.sessionCount ? ` · ${pkg.sessionCount} görüşme` : ""} · {SESSION_MODE_LABELS[pkg.sessionMode]}
                 </p>
               </div>
               <p className="text-lg font-semibold text-foreground">

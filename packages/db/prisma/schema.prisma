@@ -133,6 +133,8 @@ model User {
   postLikes        PostLike[]
   postComments     PostComment[]
   emailTokens      EmailToken[]
+  refreshTokens    RefreshToken[]
+  consents         ConsentRecord[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -170,6 +172,7 @@ model DietitianProfile {
   yearsOfExperience   Int?
   licenseNumber       String?
   certificationUrls   String[]
+  city                String?
   verificationStatus  VerificationStatus @default(PENDING)
   commissionRate      Decimal            @default(0.15)
   averageRating       Decimal?
@@ -185,6 +188,8 @@ model DietitianProfile {
   reviews       Review[]
   orders        Order[]
   conversations Conversation[]
+  dayComments   DayComment[]
+  showcaseConsents ShowcaseConsent[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -200,6 +205,18 @@ model ClientProfile {
   goal           Goal?
   activityLevel  ActivityLevel?
   medicalNotes   String?
+  // Diyetisyen eşleştirme ve kişiselleştirme için kayıtta/profilde toplanan yaşam tarzı bilgileri.
+  // Hepsi opsiyonel ve veri minimizasyonu gereği yalnızca bu amaçla kullanılır.
+  occupation          String?
+  hobbies             String[]
+  sports              String[]
+  dietaryPreferences  String[]
+  allergies           String[]
+  currentWeightKg     Decimal?
+  targetWeightKg      Decimal?
+  city                String?
+  preferredSessionMode SessionMode?
+  maxBudgetTry        Int?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -211,6 +228,11 @@ model ClientProfile {
   reviews       Review[]
   appointments  Appointment[]
   conversations Conversation[]
+  mealItemLogs  MealItemLog[]
+  foodLogEntries FoodLogEntry[]
+  waterLogs     WaterLog[]
+  dayComments   DayComment[]
+  showcaseConsents ShowcaseConsent[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -273,6 +295,7 @@ model FoodItem {
   nutrientData        NutrientData?
   recipeIngredients   RecipeIngredient[]
   dietPlanMealItems   DietPlanMealItem[]
+  foodLogEntries      FoodLogEntry[]
 
   @@index([name])
   @@index([category])
@@ -420,6 +443,7 @@ model DietPlanMealItem {
   dietPlanMeal  DietPlanMeal @relation(fields: [dietPlanMealId], references: [id], onDelete: Cascade)
   foodItem      FoodItem?    @relation(fields: [foodItemId], references: [id])
   recipe        Recipe?      @relation(fields: [recipeId], references: [id])
+  logs          MealItemLog[]
 
   @@index([dietPlanMealId])
 }
@@ -435,6 +459,7 @@ model Package {
   description    String?
   durationDays   Int
   sessionCount   Int?
+  sessionMode    SessionMode @default(BOTH)
   price          Decimal
   currency       String   @default("TRY")
   isActive       Boolean  @default(true)
@@ -467,6 +492,7 @@ model Order {
   package    Package          @relation(fields: [packageId], references: [id])
   dietitian  DietitianProfile @relation(fields: [dietitianId], references: [id])
   payment    Payment?
+  appointments Appointment[]
 
   @@index([status])
 }
@@ -500,12 +526,16 @@ model Appointment {
   scheduledAt       DateTime
   durationMinutes   Int                @default(30)
   status            AppointmentStatus
+  type              AppointmentType    @default(ONLINE)
   meetingLink       String?
+  // Randevunun hangi paket siparişinin seans hakkından düşüldüğü; manuel bağlı danışanlarda null.
+  orderId           String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   client     ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   dietitian  DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  order      Order?           @relation(fields: [orderId], references: [id])
 
   @@index([scheduledAt])
 }
@@ -705,4 +735,155 @@ model PostComment {
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([postId])
+}
+
+// Oturum (refresh token) kaydı. JWT'nin kendisi saklanmaz; sadece jti (id) ve ait olduğu
+// "aile" (bir girişten türeyen zincir) tutulur. Her yenilemede eski kayıt iptal edilir
+// (rotation); iptal edilmiş bir token tekrar kullanılırsa tüm aile iptal edilir (çalıntı tespiti).
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Danışan günlük takibi (diyetisyen tarafından izlenir)
+// ─────────────────────────────────────────────────────────────
+
+enum MealLogStatus {
+  EATEN
+  PARTIAL
+  SKIPPED
+}
+
+// Danışanın diyet planındaki bir kalemi belirli bir günde "yedim / kısmen / yemedim"
+// olarak işaretlemesi. logDate, planın başlangıç tarihi + gün numarasından sunucuda hesaplanır.
+model MealItemLog {
+  id                 String        @id @default(uuid())
+  clientId           String
+  dietPlanMealItemId String
+  logDate            DateTime      @db.Date
+  status             MealLogStatus
+  note               String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  client   ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  mealItem DietPlanMealItem @relation(fields: [dietPlanMealItemId], references: [id], onDelete: Cascade)
+
+  @@unique([dietPlanMealItemId, logDate])
+  @@index([clientId, logDate])
+}
+
+// Plan dışında yenen besin. Besin değerleri kayıt anında anlık görüntü olarak saklanır; besin
+// veritabanı sonradan değişse de danışanın geçmiş günlüğü değişmez.
+model FoodLogEntry {
+  id         String          @id @default(uuid())
+  clientId   String
+  logDate    DateTime        @db.Date
+  mealType   MealType
+  foodItemId String?
+  customName String?
+  quantity   Decimal
+  unit       MeasurementUnit
+  calories   Decimal
+  protein    Decimal
+  carbs      Decimal
+  fat        Decimal
+  createdAt  DateTime        @default(now())
+
+  client   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  foodItem FoodItem?     @relation(fields: [foodItemId], references: [id])
+
+  @@index([clientId, logDate])
+}
+
+model WaterLog {
+  id        String   @id @default(uuid())
+  clientId  String
+  logDate   DateTime @db.Date
+  amountMl  Int
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, logDate])
+}
+
+// Diyetisyenin danışanın belirli bir günü için bıraktığı yorum/geri bildirim.
+model DayComment {
+  id          String   @id @default(uuid())
+  clientId    String
+  dietitianId String
+  logDate     DateTime @db.Date
+  body        String
+  createdAt   DateTime @default(now())
+
+  client    ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, logDate])
+}
+
+// Paketin hangi seans türlerini kapsadığı ve randevunun türü.
+enum SessionMode {
+  ONLINE
+  IN_PERSON
+  BOTH
+}
+
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
+}
+
+// ---- KVKK: açık rıza / aydınlatma kayıtları ----
+
+enum ConsentType {
+  PRIVACY_NOTICE        // aydınlatma metnini okuduğunu onaylama
+  TERMS_OF_SERVICE      // kullanım koşulları
+  HEALTH_DATA_EXPLICIT  // sağlık verisinin işlenmesine açık rıza (özel nitelikli kişisel veri)
+  SHOWCASE_PROGRESS     // değişim (kilo/fotoğraf) verisinin diyetisyen vitrininde herkese açık gösterilmesi
+}
+
+// Her rıza ayrı satırdır: hangi metnin hangi sürümüne ne zaman onay verildiği (ve ne zaman
+// geri çekildiği) kanıtlanabilir. Rıza geri çekilince satır silinmez, revokedAt dolar.
+model ConsentRecord {
+  id         String      @id @default(uuid())
+  userId     String
+  type       ConsentType
+  version    String
+  acceptedAt DateTime    @default(now())
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+// Danışanın değişim (kilo geçmişi, isteğe bağlı fotoğraf) verisini bir diyetisyenin herkese açık
+// vitrininde göstermeye verdiği açık, geri alınabilir izin. Varsayılan: anonim, fotoğrafsız.
+// Her verme/geri çekme ayrıca ConsentRecord (SHOWCASE_PROGRESS) olarak denetim izine yazılır.
+model ShowcaseConsent {
+  id            String    @id @default(uuid())
+  clientId      String
+  dietitianId   String
+  anonymous     Boolean   @default(true)
+  includePhotos Boolean   @default(false)
+  grantedAt     DateTime  @default(now())
+  revokedAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  client    ClientProfile    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, dietitianId])
+  @@index([dietitianId])
 }

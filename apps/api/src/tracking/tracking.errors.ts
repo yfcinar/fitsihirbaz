@@ -1,0 +1,9 @@
+export class ClientProfileNotFoundError extends Error {}
+export class DietitianProfileNotFoundError extends Error {}
+export class MissingClientIdError extends Error {}
+export class TrackingAccessDeniedError extends Error {}
+export class MealItemNotFoundError extends Error {}
+export class MealItemDateMismatchError extends Error {}
+export class FutureDateNotAllowedError extends Error {}
+export class FoodNotFoundError extends Error {}
+export class EntryNotFoundError extends Error {}

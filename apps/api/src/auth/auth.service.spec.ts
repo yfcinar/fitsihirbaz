@@ -1,3 +1,4 @@
+import { CONSENT_VERSION } from "@fit-sihirbaz/shared";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenService } from "./token.service";
@@ -19,6 +20,7 @@ function buildUserRow(overrides: Partial<Record<string, unknown>> = {}) {
     role: "CLIENT",
     firstName: "Ada",
     lastName: "Lovelace",
+    consents: CONSENTS,
     phone: null,
     avatarUrl: null,
     isEmailVerified: false,
@@ -42,6 +44,8 @@ function buildEmailTokenRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+const CONSENTS = { privacyNotice: true as const, termsOfService: true as const, healthDataExplicit: true };
+
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 const ENV_VALUES: Record<string, string> = { WEB_APP_URL: "http://localhost:3000" };
@@ -50,9 +54,10 @@ describe("AuthService", () => {
   let prisma: {
     user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     emailToken: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; deleteMany: jest.Mock };
+    refreshToken: { create: jest.Mock; findUnique: jest.Mock; updateMany: jest.Mock };
     $transaction: jest.Mock;
   };
-  let tokens: { issuePair: jest.Mock; verifyRefreshToken: jest.Mock };
+  let tokens: { issueSession: jest.Mock; verifyRefreshToken: jest.Mock };
   let config: { get: jest.Mock; getOrThrow: jest.Mock };
   let mail: { send: jest.Mock };
   let service: AuthService;
@@ -70,10 +75,19 @@ describe("AuthService", () => {
         update: jest.fn(),
         deleteMany: jest.fn(),
       },
+      refreshToken: {
+        create: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       $transaction: jest.fn(async (ops: unknown[]) => ops),
     };
     tokens = {
-      issuePair: jest.fn().mockReturnValue({ accessToken: "access", refreshToken: "refresh" }),
+      issueSession: jest.fn().mockReturnValue({
+        tokens: { accessToken: "access", refreshToken: "refresh" },
+        refreshTokenId: "new-jti",
+        refreshExpiresAt: new Date("2030-01-01"),
+      }),
       verifyRefreshToken: jest.fn(),
     };
     config = {
@@ -100,6 +114,7 @@ describe("AuthService", () => {
           role: "CLIENT",
           firstName: "Ada",
           lastName: "Lovelace",
+          consents: CONSENTS,
         }),
       ).rejects.toBeInstanceOf(EmailAlreadyExistsError);
       expect(prisma.user.create).not.toHaveBeenCalled();
@@ -117,6 +132,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       expect(prisma.user.create).toHaveBeenCalledTimes(1);
@@ -125,6 +141,45 @@ describe("AuthService", () => {
       expect(createArgs.data.clientProfile).toEqual({ create: {} });
       expect(result.user.email).toBe("test@example.com");
       expect(result.tokens).toEqual({ accessToken: "access", refreshToken: "refresh" });
+    });
+
+    it("rızaları sürümüyle birlikte kaydeder (aydınlatma, koşullar, sağlık verisi)", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(buildUserRow());
+
+      await service.register({
+        email: "test@example.com",
+        password: "Sifre123",
+        role: "CLIENT",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        consents: CONSENTS,
+      });
+
+      const consents = prisma.user.create.mock.calls[0][0].data.consents.create;
+      expect(consents.map((entry: { type: string }) => entry.type)).toEqual([
+        "PRIVACY_NOTICE",
+        "TERMS_OF_SERVICE",
+        "HEALTH_DATA_EXPLICIT",
+      ]);
+      expect(consents.every((entry: { version: string }) => entry.version === CONSENT_VERSION)).toBe(true);
+    });
+
+    it("sağlık verisi rızası verilmediyse (diyetisyen) bu rıza kaydı oluşturulmaz", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(buildUserRow({ role: "DIETITIAN" }));
+
+      await service.register({
+        email: "dyt@example.com",
+        password: "Sifre123",
+        role: "DIETITIAN",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        consents: { ...CONSENTS, healthDataExplicit: false },
+      });
+
+      const consents = prisma.user.create.mock.calls[0][0].data.consents.create;
+      expect(consents.map((entry: { type: string }) => entry.type)).toEqual(["PRIVACY_NOTICE", "TERMS_OF_SERVICE"]);
     });
 
     it("DIETITIAN rolü için dietitianProfile oluşturur", async () => {
@@ -137,6 +192,7 @@ describe("AuthService", () => {
         role: "DIETITIAN",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       const createArgs = prisma.user.create.mock.calls[0][0];
@@ -155,6 +211,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
       await flushPromises();
 
@@ -204,6 +261,7 @@ describe("AuthService", () => {
         role: "CLIENT",
         firstName: "Ada",
         lastName: "Lovelace",
+        consents: CONSENTS,
       });
 
       prisma.user.findUnique.mockResolvedValue(buildUserRow({ passwordHash: storedHash }));
@@ -213,6 +271,20 @@ describe("AuthService", () => {
   });
 
   describe("refresh", () => {
+    const VALID_PAYLOAD = { sub: "user-1", jti: "jti-1", fam: "fam-1" };
+
+    function buildRefreshRow(overrides: Partial<Record<string, unknown>> = {}) {
+      return {
+        id: "jti-1",
+        userId: "user-1",
+        familyId: "fam-1",
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+        createdAt: new Date(),
+        ...overrides,
+      };
+    }
+
     it("geçersiz refresh token için InvalidRefreshTokenError fırlatır", async () => {
       tokens.verifyRefreshToken.mockImplementation(() => {
         throw new Error("jwt malformed");
@@ -221,20 +293,110 @@ describe("AuthService", () => {
       await expect(service.refresh("bozuk-token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
     });
 
-    it("kullanıcı artık yoksa InvalidRefreshTokenError fırlatır", async () => {
+    it("jti/fam taşımayan eski token'ı reddeder", async () => {
       tokens.verifyRefreshToken.mockReturnValue({ sub: "user-1" });
+
+      await expect(service.refresh("eski-token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+      expect(prisma.refreshToken.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("veritabanında kaydı olmayan token'ı reddeder", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.refresh("token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+    });
+
+    it("kullanıcı artık yoksa InvalidRefreshTokenError fırlatır", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(buildRefreshRow());
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(service.refresh("gecerli-token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
     });
 
-    it("geçerli token için yeni bir token çifti döner", async () => {
-      tokens.verifyRefreshToken.mockReturnValue({ sub: "user-1" });
+    it("geçerli token'ı iptal edip aynı ailede yeni bir token çifti döner (rotasyon)", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(buildRefreshRow());
       prisma.user.findUnique.mockResolvedValue(buildUserRow());
 
       const result = await service.refresh("gecerli-token");
+
       expect(result).toEqual({ accessToken: "access", refreshToken: "refresh" });
-      expect(tokens.issuePair).toHaveBeenCalledWith("user-1", "CLIENT");
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: "jti-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(tokens.issueSession).toHaveBeenCalledWith("user-1", "CLIENT", "fam-1");
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+        data: { id: "new-jti", userId: "user-1", familyId: "fam-1", expiresAt: new Date("2030-01-01") },
+      });
+    });
+
+    it("iki istek aynı anda gelirse yalnızca biri kazanır, kaybeden reddedilir", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(buildRefreshRow());
+      prisma.user.findUnique.mockResolvedValue(buildUserRow());
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh("gecerli-token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it("uzun süre önce iptal edilmiş token tekrar gelirse tüm aileyi iptal eder", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(
+        buildRefreshRow({ revokedAt: new Date(Date.now() - 60 * 60 * 1000) }),
+      );
+
+      await expect(service.refresh("calinti-token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { familyId: "fam-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it("az önce iptal edilmiş token (çakışan istek) reddedilir ama aileyi iptal etmez", async () => {
+      tokens.verifyRefreshToken.mockReturnValue(VALID_PAYLOAD);
+      prisma.refreshToken.findUnique.mockResolvedValue(buildRefreshRow({ revokedAt: new Date() }));
+
+      await expect(service.refresh("token")).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("logout", () => {
+    it("geçerli refresh token varsa sadece o oturumun ailesini iptal eder", async () => {
+      tokens.verifyRefreshToken.mockReturnValue({ sub: "user-1", jti: "jti-1", fam: "fam-1" });
+
+      await service.logout("user-1", "token");
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { familyId: "fam-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it("refresh token yoksa kullanıcının tüm oturumlarını iptal eder", async () => {
+      await service.logout("user-1");
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: "user-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it("başka bir kullanıcıya ait token ile çağrılırsa o kullanıcının ailesine dokunmaz", async () => {
+      tokens.verifyRefreshToken.mockReturnValue({ sub: "baska-kullanici", jti: "jti-9", fam: "fam-9" });
+
+      await service.logout("user-1", "token");
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: "user-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
     });
   });
 

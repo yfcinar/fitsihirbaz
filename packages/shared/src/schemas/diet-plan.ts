@@ -110,6 +110,11 @@ export const DietPlanDetailSchema = DietPlanSummarySchema.extend({
 });
 export type DietPlanDetail = z.infer<typeof DietPlanDetailSchema>;
 
+export const SendDietPlanInputSchema = z.object({
+  dietPlanId: z.string().uuid(),
+});
+export type SendDietPlanInput = z.infer<typeof SendDietPlanInputSchema>;
+
 export const DuplicateForNewCalorieTargetInputSchema = z.object({
   dietPlanId: z.string().uuid(),
   newTargetCalories: z.coerce.number().int().positive(),

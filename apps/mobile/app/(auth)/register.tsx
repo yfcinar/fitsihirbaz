@@ -16,12 +16,23 @@ export default function RegisterScreen() {
 
   const {
     control,
+    watch,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
     resolver: zodResolver(RegisterInputSchema),
-    defaultValues: { role: "CLIENT", firstName: "", lastName: "", email: "", password: "", phone: "" },
+    defaultValues: {
+      role: "CLIENT",
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      phone: "",
+      consents: { privacyNotice: false as unknown as true, termsOfService: false as unknown as true, healthDataExplicit: false },
+    },
   });
+
+  const role = watch("role");
 
   async function onSubmit(values: RegisterInput) {
     setServerError(null);
@@ -130,6 +141,49 @@ export default function RegisterScreen() {
       />
       {errors.password && <Text style={styles.error}>{errors.password.message}</Text>}
 
+      <Text style={styles.label}>Onaylar</Text>
+      <Controller
+        control={control}
+        name="consents.privacyNotice"
+        render={({ field }) => (
+          <Pressable testID="register-consent-privacy" style={styles.consentRow} onPress={() => field.onChange(field.value !== true)}>
+            <Text style={styles.checkbox}>{field.value === true ? "☑" : "☐"}</Text>
+            <Text style={styles.consentText}>KVKK Aydınlatma Metni&apos;ni (web sitemizde) okudum, anladım.</Text>
+          </Pressable>
+        )}
+      />
+      {errors.consents?.privacyNotice && <Text style={styles.error}>{errors.consents.privacyNotice.message}</Text>}
+      <Controller
+        control={control}
+        name="consents.termsOfService"
+        render={({ field }) => (
+          <Pressable testID="register-consent-terms" style={styles.consentRow} onPress={() => field.onChange(field.value !== true)}>
+            <Text style={styles.checkbox}>{field.value === true ? "☑" : "☐"}</Text>
+            <Text style={styles.consentText}>Kullanım Koşulları&apos;nı kabul ediyorum.</Text>
+          </Pressable>
+        )}
+      />
+      {errors.consents?.termsOfService && <Text style={styles.error}>{errors.consents.termsOfService.message}</Text>}
+      {role === "CLIENT" && (
+        <>
+          <Controller
+            control={control}
+            name="consents.healthDataExplicit"
+            render={({ field }) => (
+              <Pressable testID="register-consent-health" style={styles.consentRow} onPress={() => field.onChange(field.value !== true)}>
+                <Text style={styles.checkbox}>{field.value === true ? "☑" : "☐"}</Text>
+                <Text style={styles.consentText}>
+                  Sağlık verilerimin diyet hizmeti ve diyetisyenim tarafından takibi amacıyla işlenmesine açık rıza veriyorum.
+                </Text>
+              </Pressable>
+            )}
+          />
+          {errors.consents?.healthDataExplicit && (
+            <Text style={styles.error}>{errors.consents.healthDataExplicit.message}</Text>
+          )}
+        </>
+      )}
+
       {serverError && <Text style={styles.error}>{serverError}</Text>}
 
       <Pressable
@@ -161,6 +215,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   error: { color: "#dc2626", fontSize: 13, marginTop: 4 },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 },
+  checkbox: { fontSize: 20, color: "#047857" },
+  consentText: { flex: 1, fontSize: 13, color: "#374151" },
   roleRow: { flexDirection: "row", gap: 12, marginTop: 4 },
   roleOption: {
     borderWidth: 1,

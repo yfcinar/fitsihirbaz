@@ -9,14 +9,39 @@ const passwordSchema = z
   .regex(/[A-Za-z]/, "Şifre en az bir harf içermeli")
   .regex(/[0-9]/, "Şifre en az bir rakam içermeli");
 
-export const RegisterInputSchema = z.object({
-  email: z.string().email("Geçerli bir e-posta girin"),
-  password: passwordSchema,
-  role: RegistrableRoleSchema,
-  firstName: z.string().min(1, "Ad zorunlu").max(100),
-  lastName: z.string().min(1, "Soyad zorunlu").max(100),
-  phone: optionalPhoneSchema,
+// Rıza metinlerinin sürümü; metin değiştiğinde güncellenir ve her rıza kaydında saklanır.
+// UYARI: metinler taslaktır, yayına almadan önce bir hukukçu tarafından gözden geçirilmelidir.
+export const CONSENT_VERSION = "2026-11-taslak";
+
+const mustAccept = (message: string) => z.literal(true, { errorMap: () => ({ message }) });
+
+export const RegisterConsentsSchema = z.object({
+  privacyNotice: mustAccept("Aydınlatma metnini okuduğunuzu onaylamalısınız"),
+  termsOfService: mustAccept("Kullanım koşullarını kabul etmelisiniz"),
+  // Danışan için zorunlu (aşağıdaki superRefine); sağlık verisi "özel nitelikli kişisel veri"dir.
+  healthDataExplicit: z.boolean().default(false),
 });
+export type RegisterConsents = z.infer<typeof RegisterConsentsSchema>;
+
+export const RegisterInputSchema = z
+  .object({
+    email: z.string().email("Geçerli bir e-posta girin"),
+    password: passwordSchema,
+    role: RegistrableRoleSchema,
+    firstName: z.string().min(1, "Ad zorunlu").max(100),
+    lastName: z.string().min(1, "Soyad zorunlu").max(100),
+    phone: optionalPhoneSchema,
+    consents: RegisterConsentsSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "CLIENT" && !value.consents.healthDataExplicit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["consents", "healthDataExplicit"],
+        message: "Sağlık verilerinizin işlenmesine açık rıza vermelisiniz",
+      });
+    }
+  });
 export type RegisterInput = z.infer<typeof RegisterInputSchema>;
 
 export const LoginInputSchema = z.object({
