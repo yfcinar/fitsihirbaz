@@ -12,7 +12,13 @@ import {
   DietPlanSummarySchema,
   DuplicateForNewCalorieTargetInputSchema,
   ListDietPlansInputSchema,
+  ApplyDietPlanTemplateInputSchema,
+  ApplyDietPlanTemplateResultSchema,
   CopyDietPlanDayInputSchema,
+  DeleteDietPlanTemplateInputSchema,
+  DietPlanTemplateSummarySchema,
+  SaveDietPlanAsTemplateInputSchema,
+  UpdateDietPlanMealInputSchema,
   RemoveDietPlanDayInputSchema,
   RemoveDietPlanMealInputSchema,
   RemoveDietPlanMealItemInputSchema,
@@ -34,6 +40,7 @@ import {
   DietPlanNotDraftError,
   DietPlanNotFoundError,
   DietPlanRecipeNotFoundError,
+  DietPlanTemplateNotFoundError,
   DietitianProfileNotFoundError,
   EmptyDietPlanError,
   MissingClientIdError,
@@ -78,6 +85,9 @@ function mapDietPlanError(error: unknown): never {
   }
   if (error instanceof DietPlanItemNotFoundError) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Besin kalemi bulunamadı" });
+  }
+  if (error instanceof DietPlanTemplateNotFoundError) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Şablon bulunamadı" });
   }
   if (error instanceof DietPlanCompletedError) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Tamamlanmış plan değiştirilemez" });
@@ -140,6 +150,59 @@ export function createDietPlansRouter(service: DietPlansService) {
       .mutation(async ({ ctx, input }) => {
         try {
           return await service.updateMealItem(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    updateMeal: dietitianProcedure
+      .input(UpdateDietPlanMealInputSchema)
+      .output(DietPlanMealViewSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.updateMeal(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    saveAsTemplate: dietitianProcedure
+      .input(SaveDietPlanAsTemplateInputSchema)
+      .output(DietPlanTemplateSummarySchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.saveAsTemplate(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    listTemplates: dietitianProcedure.output(z.array(DietPlanTemplateSummarySchema)).query(async ({ ctx }) => {
+      try {
+        return await service.listTemplates(ctx.user.id);
+      } catch (error) {
+        mapDietPlanError(error);
+      }
+    }),
+
+    applyTemplate: dietitianProcedure
+      .input(ApplyDietPlanTemplateInputSchema)
+      .output(ApplyDietPlanTemplateResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await service.applyTemplate(ctx.user.id, input);
+        } catch (error) {
+          mapDietPlanError(error);
+        }
+      }),
+
+    deleteTemplate: dietitianProcedure
+      .input(DeleteDietPlanTemplateInputSchema)
+      .output(RemovedResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await service.deleteTemplate(ctx.user.id, input.templateId);
+          return { removed: true as const };
         } catch (error) {
           mapDietPlanError(error);
         }

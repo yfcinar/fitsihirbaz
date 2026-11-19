@@ -43,8 +43,22 @@ export const AddDietPlanMealInputSchema = z.object({
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM formatında olmalı")
     .optional(),
+  note: z.string().trim().max(500).optional(),
 });
 export type AddDietPlanMealInput = z.infer<typeof AddDietPlanMealInputSchema>;
+
+// Öğün saati/notu güncelleme: alan verilmezse değişmez, null verilirse temizlenir.
+// Hem taslakta hem gönderilmiş planda yapılabilir (kayıt silinmez, danışan günlüğü korunur).
+export const UpdateDietPlanMealInputSchema = z.object({
+  dietPlanMealId: z.string().uuid(),
+  plannedTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM formatında olmalı")
+    .nullable()
+    .optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+export type UpdateDietPlanMealInput = z.infer<typeof UpdateDietPlanMealInputSchema>;
 
 // foodItemId veya recipeId'den yalnızca biri belirtilmeli (bkz. DATABASE.md §13).
 // Recipe seçildiğinde quantity, tarifin kaç porsiyonunun ekleneceğini belirtir (unit=PORTION olmalı).
@@ -76,6 +90,7 @@ export const DietPlanMealViewSchema = z.object({
   id: z.string().uuid(),
   mealType: MealTypeSchema,
   plannedTime: z.string().nullable(),
+  note: z.string().nullable(),
   items: z.array(DietPlanMealItemViewSchema),
   totals: NutrientTotalsSchema,
 });
@@ -151,3 +166,67 @@ export const ListDietPlansInputSchema = z.object({
   clientId: z.string().uuid().optional(),
 });
 export type ListDietPlansInput = z.infer<typeof ListDietPlansInputSchema>;
+
+// ── Diyet şablonları ──────────────────────────────────────────
+// Şablon içeriği: plan hiyerarşisinin besin kimlikleriyle anlık görüntüsü. Veritabanında JSON saklanır,
+// uygularken bu şemayla doğrulanır (elle bozulmuş/eski içerik güvenle reddedilir).
+export const DietPlanTemplateContentSchema = z.object({
+  days: z.array(
+    z.object({
+      dayNumber: z.number().int().positive(),
+      meals: z.array(
+        z.object({
+          mealType: MealTypeSchema,
+          plannedTime: z.string().nullable(),
+          note: z.string().nullable(),
+          items: z.array(
+            z.object({
+              foodItemId: z.string().uuid().nullable(),
+              recipeId: z.string().uuid().nullable(),
+              quantity: z.number().positive(),
+              unit: MeasurementUnitSchema,
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+export type DietPlanTemplateContent = z.infer<typeof DietPlanTemplateContentSchema>;
+
+export const DietPlanTemplateSummarySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  targetCalories: z.number().int().nullable(),
+  dayCount: z.number().int(),
+  itemCount: z.number().int(),
+  createdAt: z.string(),
+});
+export type DietPlanTemplateSummary = z.infer<typeof DietPlanTemplateSummarySchema>;
+
+export const SaveDietPlanAsTemplateInputSchema = z.object({
+  dietPlanId: z.string().uuid(),
+  name: z.string().trim().min(1, "Şablon adı zorunlu").max(120),
+  description: optionalCoerced(z.string().trim().max(500)),
+});
+export type SaveDietPlanAsTemplateInput = z.infer<typeof SaveDietPlanAsTemplateInputSchema>;
+
+export const ApplyDietPlanTemplateInputSchema = z.object({
+  templateId: z.string().uuid(),
+  clientId: z.string().uuid(),
+  title: z.string().trim().min(1, "Başlık zorunlu").max(200),
+  startDate: z.string().date("YYYY-MM-DD formatında olmalı"),
+  targetCalories: optionalCoerced(z.coerce.number().int().positive()),
+});
+export type ApplyDietPlanTemplateInput = z.infer<typeof ApplyDietPlanTemplateInputSchema>;
+
+export const ApplyDietPlanTemplateResultSchema = z.object({
+  plan: DietPlanSummarySchema,
+  // Şablondaki besin/tarif artık yoksa o kalem atlanır; kaç kalemin atlandığı bildirilir.
+  skippedItems: z.number().int(),
+});
+export type ApplyDietPlanTemplateResult = z.infer<typeof ApplyDietPlanTemplateResultSchema>;
+
+export const DeleteDietPlanTemplateInputSchema = z.object({ templateId: z.string().uuid() });
+export type DeleteDietPlanTemplateInput = z.infer<typeof DeleteDietPlanTemplateInputSchema>;

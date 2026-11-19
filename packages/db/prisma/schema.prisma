@@ -177,6 +177,7 @@ model DietitianProfile {
   commissionRate      Decimal            @default(0.15)
   averageRating       Decimal?
   payoutAccountInfo   Json?
+  dietPlanTemplates   DietPlanTemplate[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -395,6 +396,23 @@ model DietPlan {
 // 11. DietPlanDay
 // ─────────────────────────────────────────────────────────────
 
+// Diyetisyenin kendi diyet şablonu. Plan hiyerarşisi (gün > öğün > besin) JSON anlık görüntü olarak
+// saklanır; şablon uygulanınca danışan için yeni bir DRAFT plan üretilir. Şablon yalnızca sahibine görünür.
+model DietPlanTemplate {
+  id             String   @id @default(uuid())
+  dietitianId    String
+  name           String
+  description    String?
+  targetCalories Int?
+  content        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  dietitian DietitianProfile @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@index([dietitianId])
+}
+
 model DietPlanDay {
   id          String   @id @default(uuid())
   dietPlanId  String
@@ -417,6 +435,7 @@ model DietPlanMeal {
   dietPlanDayId    String
   mealType         MealType
   plannedTime      DateTime? @db.Time
+  note             String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

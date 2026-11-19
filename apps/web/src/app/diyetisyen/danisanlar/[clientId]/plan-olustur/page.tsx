@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CreateDietPlanInputSchema, type CreateDietPlanInput } from "@fit-sihirbaz/shared";
 import { trpc } from "@/lib/trpc";
 import { DietPlanBuilder } from "@/components/diet-plans/DietPlanBuilder";
+import { TemplatePicker } from "@/components/diet-plans/TemplatePicker";
 import { QueryErrorNotice } from "@/components/QueryErrorNotice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,6 +73,9 @@ export default function PlanOlusturPage() {
         </div>
       )}
 
+      <TemplatePicker clientId={clientId} onApplied={setSelectedPlanId} />
+
+      <h2 className="mb-3 text-sm font-medium text-foreground">Boş plan oluştur</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="title">Plan Başlığı</Label>

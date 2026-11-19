@@ -12,6 +12,8 @@ import type {
   DietPlanMealItemView,
   DietPlanMealView,
   DietPlanSummary,
+  DietPlanTemplateContent,
+  DietPlanTemplateSummary,
 } from "@fit-sihirbaz/shared";
 import { calculateRecipeTotalsPerServing, type RecipeWithIngredients } from "../recipes/recipes.mapper";
 import { addTotals, calculateItemNutrients, zeroTotals } from "./diet-plans.calculator";
@@ -80,13 +82,29 @@ export function buildMealItemView(item: MealItemRow): DietPlanMealItemView {
   };
 }
 
-function buildMealView(meal: MealRow): DietPlanMealView {
+export function toTemplateSummary(
+  template: { id: string; name: string; description: string | null; targetCalories: number | null; createdAt: Date },
+  content: DietPlanTemplateContent,
+): DietPlanTemplateSummary {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    targetCalories: template.targetCalories,
+    dayCount: content.days.length,
+    itemCount: content.days.reduce((sum, day) => sum + day.meals.reduce((s, meal) => s + meal.items.length, 0), 0),
+    createdAt: template.createdAt.toISOString(),
+  };
+}
+
+export function buildMealView(meal: MealRow): DietPlanMealView {
   const items = meal.items.map(buildMealItemView);
   const totals = items.reduce((acc, item) => addTotals(acc, item), zeroTotals());
   return {
     id: meal.id,
     mealType: meal.mealType,
     plannedTime: meal.plannedTime ? toTimeString(meal.plannedTime) : null,
+    note: meal.note ?? null,
     items,
     totals,
   };

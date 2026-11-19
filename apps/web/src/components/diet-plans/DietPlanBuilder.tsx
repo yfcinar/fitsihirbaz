@@ -6,6 +6,7 @@ import type { MealType } from "@fit-sihirbaz/shared";
 import { MealItemAdder } from "./MealItemAdder";
 import { MEAL_TYPE_LABELS, TotalsBadge } from "./diet-plan-ui";
 import { MealItemRow } from "./MealItemRow";
+import { MealMetaEditor } from "./MealMetaEditor";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,14 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
   });
 
   const addDayMutation = trpc.dietPlans.addDay.useMutation({ onSuccess: refetchPlan });
-  const copyDayMutation = trpc.dietPlans.copyDay.useMutation({ onSuccess: refetchPlan });
+  const [templateName, setTemplateName] = useState("");
+  const saveTemplateMutation = trpc.dietPlans.saveAsTemplate.useMutation({
+    onSuccess: () => {
+      setTemplateName("");
+      utils.dietPlans.listTemplates.invalidate();
+    },
+  });
+  const copyDayMutation =trpc.dietPlans.copyDay.useMutation({ onSuccess: refetchPlan });
   const removeDayMutation = trpc.dietPlans.removeDay.useMutation({ onSuccess: refetchPlan });
   const removeMealMutation = trpc.dietPlans.removeMeal.useMutation({ onSuccess: refetchPlan });
   const addMealMutation = trpc.dietPlans.addMeal.useMutation({ onSuccess: refetchPlan });
@@ -116,6 +124,28 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
       </Card>
 
       <Card className="mb-6 flex flex-wrap items-end gap-2 bg-muted/30 p-4">
+        <div className="mr-4 space-y-1">
+          <Label className="text-xs">Şablon olarak kaydet</Label>
+          <div className="flex gap-2">
+            <Input
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="örn. 1800 kcal hafif plan"
+              className="w-56"
+            />
+            <Button
+              variant="secondary"
+              disabled={!templateName.trim() || saveTemplateMutation.isLoading}
+              onClick={() => saveTemplateMutation.mutate({ dietPlanId: planId, name: templateName.trim() })}
+            >
+              {saveTemplateMutation.isLoading ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </div>
+          {saveTemplateMutation.isSuccess && (
+            <p className="text-xs text-primary">Şablon kaydedildi; yeni plan başlatırken “Şablondan başla” bölümünde görünür.</p>
+          )}
+          {saveTemplateMutation.error && <p className="text-xs text-destructive">{saveTemplateMutation.error.message}</p>}
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">Farklı kaloriye ayarla</Label>
           <Input
@@ -186,6 +216,7 @@ export function DietPlanBuilder({ planId }: { planId: string }) {
                 </p>
                 <TotalsBadge totals={meal.totals} />
               </div>
+              <MealMetaEditor mealId={meal.id} plannedTime={meal.plannedTime} note={meal.note} onChanged={refetchPlan} />
               <ul className="space-y-1.5">
                 {meal.items.map((item) => (
                   <MealItemRow key={item.id} item={item} canDelete={isDraft} onChanged={refetchPlan} />

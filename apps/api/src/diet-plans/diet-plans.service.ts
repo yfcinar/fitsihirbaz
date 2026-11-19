@@ -1,6 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { DietPlanTemplateContentSchema } from "@fit-sihirbaz/shared";
 import type {
   AddDietPlanDayInput,
+  ApplyDietPlanTemplateInput,
+  ApplyDietPlanTemplateResult,
+  DietPlanTemplateContent,
+  DietPlanTemplateSummary,
+  SaveDietPlanAsTemplateInput,
+  UpdateDietPlanMealInput,
   AddDietPlanMealInput,
   AddDietPlanMealItemInput,
   CreateDietPlanInput,
@@ -27,6 +34,7 @@ import {
   DietPlanNotDraftError,
   DietPlanNotFoundError,
   DietPlanRecipeNotFoundError,
+  DietPlanTemplateNotFoundError,
   DietitianProfileNotFoundError,
   EmptyDietPlanError,
   MissingClientIdError,
@@ -34,9 +42,11 @@ import {
 import {
   buildDayView,
   buildMealItemView,
+  buildMealView,
   type DietPlanWithHierarchy,
   toDietPlanDetail,
   toDietPlanSummary,
+  toTemplateSummary,
 } from "./diet-plans.mapper";
 
 const RECIPE_INCLUDE = {
@@ -132,6 +142,7 @@ export class DietPlansService {
         dietPlanDayId: input.dietPlanDayId,
         mealType: input.mealType,
         plannedTime: input.plannedTime ? new Date(`1970-01-01T${input.plannedTime}:00Z`) : undefined,
+        note: input.note || undefined,
       },
     });
 
@@ -139,6 +150,7 @@ export class DietPlansService {
       id: meal.id,
       mealType: meal.mealType,
       plannedTime: input.plannedTime ?? null,
+      note: input.note || null,
       items: [],
       totals: { calories: 0, protein: 0, carbs: 0, fat: 0 },
     };
@@ -284,7 +296,7 @@ export class DietPlansService {
       });
       for (const meal of day.meals) {
         const newMeal = await tx.dietPlanMeal.create({
-          data: { dietPlanDayId: newDay.id, mealType: meal.mealType, plannedTime: meal.plannedTime },
+          data: { dietPlanDayId: newDay.id, mealType: meal.mealType, plannedTime: meal.plannedTime, note: meal.note },
         });
         for (const item of meal.items) {
           await tx.dietPlanMealItem.create({
@@ -309,6 +321,186 @@ export class DietPlansService {
       throw new DietPlanDayNotFoundError();
     }
     return buildDayView(copied);
+  }
+
+  // Öğün saati/notu: taslakta ve gönderilmiş planda değiştirilebilir, tamamlanmış planda değiştirilemez.
+  async updateMeal(dietitianUserId: string, input: UpdateDietPlanMealInput): Promise<DietPlanMealView> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const meal = await this.prisma.dietPlanMeal.findUnique({
+      where: { id: input.dietPlanMealId },
+      include: { dietPlanDay: { include: { dietPlan: true } } },
+    });
+    if (!meal) {
+      throw new DietPlanMealNotFoundError();
+    }
+    const plan = meal.dietPlanDay.dietPlan;
+    if (plan.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+    if (plan.status !== "DRAFT" && plan.status !== "ACTIVE") {
+      throw new DietPlanCompletedError();
+    }
+
+    const updated = await this.prisma.dietPlanMeal.update({
+      where: { id: meal.id },
+      data: {
+        ...(input.plannedTime !== undefined && {
+          plannedTime: input.plannedTime ? new Date(`1970-01-01T${input.plannedTime}:00Z`) : null,
+        }),
+        ...(input.note !== undefined && { note: input.note || null }),
+      },
+      include: { items: { include: MEAL_ITEM_INCLUDE } },
+    });
+    return buildMealView(updated);
+  }
+
+  // ── Şablonlar ──────────────────────────────────────────────
+
+  // Mevcut planın yapısını (besin kimlikleri + miktarlar) şablon olarak saklar.
+  async saveAsTemplate(dietitianUserId: string, input: SaveDietPlanAsTemplateInput): Promise<DietPlanTemplateSummary> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const plan = await this.loadPlanHierarchy(input.dietPlanId);
+    if (!plan) {
+      throw new DietPlanNotFoundError();
+    }
+    if (plan.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+
+    const content: DietPlanTemplateContent = {
+      days: plan.days.map((day) => ({
+        dayNumber: day.dayNumber,
+        meals: day.meals.map((meal) => ({
+          mealType: meal.mealType,
+          plannedTime: meal.plannedTime ? meal.plannedTime.toISOString().slice(11, 16) : null,
+          note: meal.note ?? null,
+          items: meal.items.map((item) => ({
+            foodItemId: item.foodItemId,
+            recipeId: item.recipeId,
+            quantity: Number(item.quantity),
+            unit: item.unit,
+          })),
+        })),
+      })),
+    };
+    if (!content.days.some((day) => day.meals.some((meal) => meal.items.length > 0))) {
+      throw new EmptyDietPlanError();
+    }
+
+    const template = await this.prisma.dietPlanTemplate.create({
+      data: {
+        dietitianId: dietitianProfile.id,
+        name: input.name,
+        description: input.description,
+        targetCalories: plan.targetCalories,
+        content,
+      },
+    });
+    return toTemplateSummary(template, content);
+  }
+
+  async listTemplates(dietitianUserId: string): Promise<DietPlanTemplateSummary[]> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const templates = await this.prisma.dietPlanTemplate.findMany({
+      where: { dietitianId: dietitianProfile.id },
+      orderBy: { createdAt: "desc" },
+    });
+    return templates.map((template) => {
+      const parsed = DietPlanTemplateContentSchema.safeParse(template.content);
+      return toTemplateSummary(template, parsed.success ? parsed.data : { days: [] });
+    });
+  }
+
+  async deleteTemplate(dietitianUserId: string, templateId: string): Promise<void> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    const template = await this.prisma.dietPlanTemplate.findUnique({ where: { id: templateId } });
+    if (!template) {
+      throw new DietPlanTemplateNotFoundError();
+    }
+    if (template.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+    await this.prisma.dietPlanTemplate.delete({ where: { id: templateId } });
+  }
+
+  // Şablondan danışan için yeni bir DRAFT plan üretir. Şablondaki besin/tarif sonradan silinmişse
+  // o kalem atlanır ve atlanan kalem sayısı döner.
+  async applyTemplate(dietitianUserId: string, input: ApplyDietPlanTemplateInput): Promise<ApplyDietPlanTemplateResult> {
+    const dietitianProfile = await this.getOwnDietitianProfile(dietitianUserId);
+    await this.assertClientLinked(dietitianProfile.id, input.clientId);
+    const template = await this.prisma.dietPlanTemplate.findUnique({ where: { id: input.templateId } });
+    if (!template) {
+      throw new DietPlanTemplateNotFoundError();
+    }
+    if (template.dietitianId !== dietitianProfile.id) {
+      throw new DietPlanAccessDeniedError();
+    }
+    const parsed = DietPlanTemplateContentSchema.safeParse(template.content);
+    if (!parsed.success) {
+      throw new DietPlanTemplateNotFoundError();
+    }
+    const content = parsed.data;
+
+    const foodIds = new Set<string>();
+    const recipeIds = new Set<string>();
+    for (const item of content.days.flatMap((d) => d.meals.flatMap((m) => m.items))) {
+      if (item.foodItemId) foodIds.add(item.foodItemId);
+      if (item.recipeId) recipeIds.add(item.recipeId);
+    }
+    const [foods, recipes] = await Promise.all([
+      this.prisma.foodItem.findMany({ where: { id: { in: [...foodIds] } }, select: { id: true } }),
+      this.prisma.recipe.findMany({ where: { id: { in: [...recipeIds] } }, select: { id: true } }),
+    ]);
+    const existingFood = new Set(foods.map((f) => f.id));
+    const existingRecipe = new Set(recipes.map((r) => r.id));
+
+    let skippedItems = 0;
+    const plan = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.dietPlan.create({
+        data: {
+          clientId: input.clientId,
+          dietitianId: dietitianProfile.id,
+          title: input.title,
+          startDate: new Date(input.startDate),
+          targetCalories: input.targetCalories ?? template.targetCalories ?? undefined,
+          status: "DRAFT",
+        },
+      });
+      for (const day of content.days) {
+        const newDay = await tx.dietPlanDay.create({ data: { dietPlanId: created.id, dayNumber: day.dayNumber } });
+        for (const meal of day.meals) {
+          const newMeal = await tx.dietPlanMeal.create({
+            data: {
+              dietPlanDayId: newDay.id,
+              mealType: meal.mealType,
+              plannedTime: meal.plannedTime ? new Date(`1970-01-01T${meal.plannedTime}:00Z`) : undefined,
+              note: meal.note ?? undefined,
+            },
+          });
+          for (const item of meal.items) {
+            const available = item.recipeId
+              ? existingRecipe.has(item.recipeId)
+              : item.foodItemId !== null && existingFood.has(item.foodItemId);
+            if (!available) {
+              skippedItems += 1;
+              continue;
+            }
+            await tx.dietPlanMealItem.create({
+              data: {
+                dietPlanMealId: newMeal.id,
+                foodItemId: item.recipeId ? undefined : item.foodItemId,
+                recipeId: item.recipeId ?? undefined,
+                quantity: item.quantity,
+                unit: item.unit,
+              },
+            });
+          }
+        }
+      }
+      return created;
+    });
+
+    return { plan: toDietPlanSummary(plan), skippedItems };
   }
 
   private assertDraftOwnedBy(plan: { dietitianId: string | null; status: string }, dietitianProfileId: string) {
@@ -445,6 +637,7 @@ export class DietPlansService {
               dietPlanDayId: newDay.id,
               mealType: meal.mealType,
               plannedTime: meal.plannedTime,
+              note: meal.note,
             },
           });
           for (const item of meal.items) {

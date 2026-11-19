@@ -12,3 +12,4 @@ export class DietPlanNotDraftError extends Error {}
 export class DietPlanHasNoItemsError extends Error {}
 export class DietPlanItemNotFoundError extends Error {}
 export class DietPlanCompletedError extends Error {}
+export class DietPlanTemplateNotFoundError extends Error {}

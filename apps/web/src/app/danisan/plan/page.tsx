@@ -101,6 +101,11 @@ export default function DiyetlerimPage() {
                 </p>
                 <TotalsBadge totals={meal.totals} />
               </div>
+              {meal.note && (
+                <p className="mb-1 rounded bg-accent px-2 py-1 text-xs text-foreground/90">
+                  Diyetisyen notu: {meal.note}
+                </p>
+              )}
               <ul className="space-y-1 text-sm text-foreground/90">
                 {meal.items.map((item) => (
                   <li key={item.id} className="flex justify-between">
